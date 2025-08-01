@@ -1,21 +1,15 @@
 from pydantic import BaseModel
+from typing import Optional
 
-# ✅ 입력용 스키마 (POST 요청 시 사용)
-class SchoolReportCreate(BaseModel):
-    student_id: int                   # 학생 고유 ID
-    student_name: str                # 학생 이름
-    behavior_summary: str | None = None      # 생활 태도 요약
-    career_aspiration: str | None = None     # 진로 희망
-    teacher_feedback: str | None = None      # 교사 종합 의견
-
-# ✅ 응답용 스키마 (GET 응답 시 사용)
 class SchoolReport(BaseModel):
-    report_id: int                   # 보고서 고유 ID (DB에서 자동 생성)
-    student_id: int
-    student_name: str
-    behavior_summary: str | None = None
-    career_aspiration: str | None = None
-    teacher_feedback: str | None = None
+    id: int                                       # 생활기록부 고유 ID
+    year: int                                     # 연도
+    semester: int                                 # 학기
+    student_id: int                               # 학생 ID
+    behavior_summary: Optional[str] = None        # 행동 특성 요약
+    peer_relation: Optional[str] = None           # 또래 관계
+    career_aspiration: Optional[str] = None       # 진로 희망
+    teacher_feedback: Optional[str] = None        # 종합 의견
 
     class Config:
-        orm_mode = True             # SQLAlchemy 모델과 호환 설정
+        orm_mode = True

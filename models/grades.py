@@ -1,13 +1,12 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, Float, String
 from database.db import Base
 
 class Grade(Base):
-    __tablename__ = "grades"
+    __tablename__ = "grades"  # 성적 요약 테이블
 
-    grade_id = Column(Integer, primary_key=True, index=True)          # 성적 고유 ID (Auto Increment, PK)
-    student_id = Column(Integer, index=True)                          # 학생 고유 ID
-    student_name = Column(String(100))                                # 학생 이름
-    subject = Column(String(50))                                      # 과목명 (예: 수학, 과학)
-    test_score = Column(Float)                                        # 시험 점수
-    assignment_score = Column(Float)                                  # 과제 점수
-    total_score = Column(Float)                                       # 총점 (합산 or 평균)
+    id = Column(Integer, primary_key=True, index=True)     # 성적 고유 ID (Primary Key)
+    student_id = Column(Integer, nullable=False)           # 학생 ID
+    subject_id = Column(Integer, nullable=False)           # 과목 ID
+    term = Column(Integer, nullable=False)                 # 학기
+    average_score = Column(Float)                          # 평균 점수
+    grade_letter = Column(String(10))                      # 성적 등급 (예: A, B, C)

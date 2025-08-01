@@ -2,10 +2,10 @@ from sqlalchemy import Column, Integer, String, Date
 from database.db import Base
 
 class Event(Base):
-    __tablename__ = "events"  # 학사일정 테이블
+    __tablename__ = "events"  # 학사 일정 테이블
 
-    event_id = Column(Integer, primary_key=True, index=True)      # 고유 ID (자동 증가)
-    title = Column(String(200), nullable=False)                   # 일정 제목
-    date = Column(Date, nullable=False)                           # 일정 날짜
-    location = Column(String(100))                                # 장소
-    target = Column(String(100))                                  # 대상 (예: 전교생, 3학년 등)
+    id = Column(Integer, primary_key=True, index=True)      # 일정 고유 ID (Primary Key)
+    event_name = Column(String(100), nullable=False)        # 행사/일정 이름 (예: 체육대회)
+    event_type = Column(String(50))                         # 일정 유형 (예: 공휴일, 수업, 행사)
+    date = Column(Date, nullable=False)                     # 날짜
+    description = Column(String(200))                       # 상세 설명

@@ -1,12 +1,14 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey
+from sqlalchemy import Column, Integer, String
 from database.db import Base
 
 class SchoolReport(Base):
-    __tablename__ = "school_report"
+    __tablename__ = "school_report"  # 생활기록부 테이블
 
-    report_id = Column(Integer, primary_key=True, index=True)         # 고유 보고서 ID (자동 생성)
-    student_id = Column(Integer, ForeignKey("student_info.student_id"))  # 학생 ID (외래키)
-    student_name = Column(String(100), nullable=False)                # 학생 이름
-    behavior_summary = Column(Text)                                   # 생활 태도 요약
-    career_aspiration = Column(Text)                                  # 진로 희망
-    teacher_feedback = Column(Text)                                   # 교사 종합 의견
+    id = Column(Integer, primary_key=True, index=True)         # 고유 ID
+    year = Column(Integer, nullable=False)                    # 연도
+    semester = Column(Integer, nullable=False)                # 학기
+    student_id = Column(Integer, nullable=False)              # 학생 ID
+    behavior_summary = Column(String(1000))                   # 행동 특성 요약
+    peer_relation = Column(String(500))                       # 또래 관계
+    career_aspiration = Column(String(500))                   # 진로 희망
+    teacher_feedback = Column(String(1000))                   # 종합 의견 (담임)

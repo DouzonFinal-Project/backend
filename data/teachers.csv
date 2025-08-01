@@ -1,0 +1,11 @@
+﻿id,name,email,phone,subject,role,is_homeroom,homeroom_class,class_id
+1,김교사,teacher1@school.kr,010-1111-1111,국어,교사,True,6학년 3반,1
+2,이교사,teacher2@school.kr,010-2222-2222,수학,교사,False,,
+3,박교사,teacher3@school.kr,010-3333-3333,영어,교사,False,,
+4,최교사,teacher4@school.kr,010-4444-4444,사회,교감,False,,
+5,정교사,teacher5@school.kr,010-5555-5555,과학,보건교사,False,,
+6,강교사,teacher6@school.kr,010-6666-6666,음악,교사,False,,
+7,윤교사,teacher7@school.kr,010-7777-7777,미술,교사,False,,
+8,장교사,teacher8@school.kr,010-8888-8888,체육,교사,False,,
+9,조교사,teacher9@school.kr,010-9999-9999,도덕,교사,False,,
+10,하교사,teacher10@school.kr,010-1010-1010,기술,교사,False,,

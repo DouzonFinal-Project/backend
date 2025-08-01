@@ -1,22 +1,15 @@
 from pydantic import BaseModel
+from typing import Optional
 from datetime import date
 
-# ✅ 등록용 (POST)
-class ReportCreate(BaseModel):
-    student_id: int
-    student_name: str
-    date: date
-    type: str
-    teacher_note: str
-
-# ✅ 조회/응답용 (GET/PUT 응답)
 class Report(BaseModel):
-    report_id: int
-    student_id: int
-    student_name: str
-    date: date
-    type: str
-    teacher_note: str
+    id: int                                  # 보고서 ID
+    student_id: int                          # 학생 ID
+    date: date                               # 상담 날짜
+    type: Optional[str] = None               # 유형 (상담/지도 등)
+    content_raw: Optional[str] = None        # 원본 내용
+    summary: Optional[str] = None            # 요약 내용
+    emotion: Optional[str] = None            # 감정 태그
 
     class Config:
         orm_mode = True

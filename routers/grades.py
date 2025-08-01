@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from models.grades import Grade as GradeModel
-from schemas.grades import Grade as GradeSchema, GradeCreate
 from database.db import SessionLocal
+from models.grades import Grade as GradeModel
+from schemas.grades import Grade as GradeSchema
 
-router = APIRouter(prefix="/grades", tags=["성적 관리"])
+router = APIRouter(prefix="/grades", tags=["성적 정보"])
 
-# ✅ DB 세션 의존성
 def get_db():
     db = SessionLocal()
     try:
@@ -14,13 +13,10 @@ def get_db():
     finally:
         db.close()
 
-# ✅ [CREATE] 성적 등록
+# ✅ [CREATE] 성적 정보 추가
 @router.post("/", response_model=GradeSchema)
-def create_grade(grade: GradeCreate, db: Session = Depends(get_db)):
-    """
-    새로운 성적 정보를 등록합니다.
-    """
-    db_grade = GradeModel(**grade.dict())
+def create_grade(grade: GradeSchema, db: Session = Depends(get_db)):
+    db_grade = GradeModel(**grade.model_dump())
     db.add(db_grade)
     db.commit()
     db.refresh(db_grade)
@@ -28,32 +24,35 @@ def create_grade(grade: GradeCreate, db: Session = Depends(get_db)):
 
 # ✅ [READ] 전체 성적 조회
 @router.get("/", response_model=list[GradeSchema])
-def read_all_grades(db: Session = Depends(get_db)):
-    """
-    전체 성적 정보를 조회합니다.
-    """
+def read_grades(db: Session = Depends(get_db)):
     return db.query(GradeModel).all()
 
-# ✅ [READ] 특정 학생의 성적 조회
-@router.get("/student/{student_id}", response_model=list[GradeSchema])
-def read_grades_by_student(student_id: int, db: Session = Depends(get_db)):
-    """
-    특정 학생(student_id)의 성적 정보를 조회합니다.
-    """
-    records = db.query(GradeModel).filter(GradeModel.student_id == student_id).all()
-    if not records:
-        raise HTTPException(status_code=404, detail="성적 정보가 없습니다.")
-    return records
+# ✅ [READ] 특정 성적 조회
+@router.get("/{grade_id}", response_model=GradeSchema)
+def read_grade(grade_id: int, db: Session = Depends(get_db)):
+    grade = db.query(GradeModel).filter(GradeModel.id == grade_id).first()
+    if grade is None:
+        raise HTTPException(status_code=404, detail="성적 정보를 찾을 수 없습니다")
+    return grade
 
-# ✅ [DELETE] 성적 정보 삭제
+# ✅ [UPDATE] 성적 정보 수정
+@router.put("/{grade_id}", response_model=GradeSchema)
+def update_grade(grade_id: int, updated: GradeSchema, db: Session = Depends(get_db)):
+    grade = db.query(GradeModel).filter(GradeModel.id == grade_id).first()
+    if grade is None:
+        raise HTTPException(status_code=404, detail="성적 정보를 찾을 수 없습니다")
+    for key, value in updated.model_dump().items():
+        setattr(grade, key, value)
+    db.commit()
+    db.refresh(grade)
+    return grade
+
+# ✅ [DELETE] 성적 삭제
 @router.delete("/{grade_id}")
 def delete_grade(grade_id: int, db: Session = Depends(get_db)):
-    """
-    특정 성적 정보를 삭제합니다.
-    """
-    record = db.query(GradeModel).filter(GradeModel.grade_id == grade_id).first()
-    if not record:
-        raise HTTPException(status_code=404, detail="성적 정보를 찾을 수 없습니다.")
-    db.delete(record)
+    grade = db.query(GradeModel).filter(GradeModel.id == grade_id).first()
+    if grade is None:
+        raise HTTPException(status_code=404, detail="성적 정보를 찾을 수 없습니다")
+    db.delete(grade)
     db.commit()
-    return {"message": "성적 정보가 삭제되었습니다."}
+    return {"message": "성적 정보가 성공적으로 삭제되었습니다"}
