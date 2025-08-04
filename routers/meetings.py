@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database.db import SessionLocal
 from models.meetings import Meeting as MeetingModel
-from schemas.meetings import Meeting as MeetingSchema
+from schemas.meetings import Meeting, MeetingCreate
 
 router = APIRouter(prefix="/meetings", tags=["상담기록"])
 
@@ -14,8 +14,8 @@ def get_db():
         db.close()
 
 # ✅ [CREATE] 상담기록 추가
-@router.post("/", response_model=MeetingSchema)
-def create_meeting(meeting: MeetingSchema, db: Session = Depends(get_db)):
+@router.post("/", response_model=Meeting)
+def create_meeting(meeting: MeetingCreate, db: Session = Depends(get_db)):
     db_meeting = MeetingModel(**meeting.model_dump())
     db.add(db_meeting)
     db.commit()
@@ -23,12 +23,12 @@ def create_meeting(meeting: MeetingSchema, db: Session = Depends(get_db)):
     return db_meeting
 
 # ✅ [READ] 전체 상담기록 조회
-@router.get("/", response_model=list[MeetingSchema])
+@router.get("/", response_model=list[Meeting])
 def read_meetings(db: Session = Depends(get_db)):
     return db.query(MeetingModel).all()
 
 # ✅ [READ] 상담기록 상세 조회
-@router.get("/{meeting_id}", response_model=MeetingSchema)
+@router.get("/{meeting_id}", response_model=Meeting)
 def read_meeting(meeting_id: int, db: Session = Depends(get_db)):
     meeting = db.query(MeetingModel).filter(MeetingModel.id == meeting_id).first()
     if meeting is None:
@@ -36,8 +36,8 @@ def read_meeting(meeting_id: int, db: Session = Depends(get_db)):
     return meeting
 
 # ✅ [UPDATE] 상담기록 수정
-@router.put("/{meeting_id}", response_model=MeetingSchema)
-def update_meeting(meeting_id: int, updated: MeetingSchema, db: Session = Depends(get_db)):
+@router.put("/{meeting_id}", response_model=Meeting)
+def update_meeting(meeting_id: int, updated: MeetingCreate, db: Session = Depends(get_db)):
     meeting = db.query(MeetingModel).filter(MeetingModel.id == meeting_id).first()
     if meeting is None:
         raise HTTPException(status_code=404, detail="상담기록을 찾을 수 없습니다")

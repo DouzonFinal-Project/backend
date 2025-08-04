@@ -9,3 +9,4 @@ class Attendance(Base):
     date = Column(Date, nullable=False)                        # 날짜
     status = Column(String(20), nullable=False)                # 출결 상태 (예: 출석, 결석, 지각)
     reason = Column(String(200))                               # 사유 (결석/조퇴 등 상세 이유)
+    special_note = Column(String(200))                         # 특이사항 (예: 감염병 의심, 면담 필요 등)

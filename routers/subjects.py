@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database.db import SessionLocal
 from models.subjects import Subject as SubjectModel
-from schemas.subjects import Subject as SubjectSchema
+from schemas.subjects import Subject as SubjectSchema, SubjectCreate  # ✅ 입력/출력 스키마 모두 import
 
 router = APIRouter(prefix="/subjects", tags=["과목 정보"])
 
@@ -15,7 +15,7 @@ def get_db():
 
 # ✅ [CREATE] 과목 정보 추가
 @router.post("/", response_model=SubjectSchema)
-def create_subject(subject: SubjectSchema, db: Session = Depends(get_db)):
+def create_subject(subject: SubjectCreate, db: Session = Depends(get_db)):
     db_subject = SubjectModel(**subject.model_dump())
     db.add(db_subject)
     db.commit()
@@ -37,7 +37,7 @@ def read_subject(subject_id: int, db: Session = Depends(get_db)):
 
 # ✅ [UPDATE] 과목 정보 수정
 @router.put("/{subject_id}", response_model=SubjectSchema)
-def update_subject(subject_id: int, updated: SubjectSchema, db: Session = Depends(get_db)):
+def update_subject(subject_id: int, updated: SubjectCreate, db: Session = Depends(get_db)):
     subject = db.query(SubjectModel).filter(SubjectModel.id == subject_id).first()
     if subject is None:
         raise HTTPException(status_code=404, detail="과목 정보를 찾을 수 없습니다")

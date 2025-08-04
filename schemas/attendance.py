@@ -8,6 +8,7 @@ class Attendance(BaseModel):
     date: date                               # 날짜
     status: str                              # 출결 상태 (예: 출석, 지각, 결석)
     reason: Optional[str] = None             # 결석/조퇴 사유
+    special_note: Optional[str] = None       # 특이사항
 
     class Config:
         orm_mode = True

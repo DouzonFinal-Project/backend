@@ -16,7 +16,8 @@ def migrate_attendance():
                 student_id=int(row["student_id"]),   # 학생 ID
                 date=row["date"],                    # 날짜
                 status=row["status"],                # 출결 상태 (예: 출석, 결석, 지각)
-                reason=row["reason"]                 # 사유 (결석/조퇴 등 상세 이유)
+                reason=row["reason"],                # 사유 (결석/조퇴 등 상세 이유)
+                special_note=row["special_note"]     # 특이사항 (예: 감염병 의심, 면담 필요 등)
             )
             db.add(attendance)
 
