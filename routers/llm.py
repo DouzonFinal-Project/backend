@@ -1,92 +1,63 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import List
-from datetime import datetime
-import csv
-import os
+"""
+LLM 라우터
+- 프론트엔드로부터 LLM 요청을 받아 Gemini API 호출
+- mode: json | text
+- task: 업무/프롬프트 태스크명
+- prompt: 사용자 프롬프트
+- options: temperature, max_tokens 등 파라미터 (선택)
+"""
 
-router = APIRouter(prefix="/llm", tags=["LLM 요약 기능"])
+from fastapi import APIRouter, HTTPException, Response, Header, status
+from pydantic import BaseModel, Field
+from typing import Any, Optional
+from services.llm.llm_gemini import generate_json, generate_text
 
-# ✅ 요약 응답을 위한 JSON 포맷
-class LLMResponse(BaseModel):
-    id: int  # 기존 str → int로 변경
-    title: str
-    student_query: str
-    counselor_answer: str
-    date: str
-    student_name: str
-    worry_tags: List[str]
+router = APIRouter(prefix="/llm", tags=["LLM"])
 
-# ✅ 학생 이름 매핑을 위한 student_id → name dict 구성
-STUDENT_NAME_MAP = {}
-STUDENT_CSV_PATH = "data/students.csv"
-if os.path.exists(STUDENT_CSV_PATH):
-    with open(STUDENT_CSV_PATH, encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            STUDENT_NAME_MAP[row["id"]] = row["student_name"]
+# 요청 모델
+class GenerateReq(BaseModel):
+    mode: str = Field("json", pattern="^(json|text)$", description="응답 형식: json 또는 text")
+    task: str = Field(..., description="태스크명(예: counseling_summary)")
+    prompt: str = Field(..., description="사용자 프롬프트")
+    options: Optional[dict] = Field(default=None, description='예: {"temperature":0.2,"max_tokens":600}')
 
-# ✅ reports.csv 경로
-REPORTS_CSV_PATH = "data/reports.csv"
+# 응답 모델
+class GenerateRes(BaseModel):
+    ok: bool = True
+    data: Any
+    usage: Optional[dict] = None
+    trace_id: Optional[str] = None
 
-# ✅ /llm/summary 전체 요약 목록
-@router.get("/summary", response_model=List[LLMResponse])
-def get_llm_summary():
-    if not os.path.exists(REPORTS_CSV_PATH):
-        raise HTTPException(status_code=404, detail="reports.csv 파일을 찾을 수 없습니다.")
+@router.post(
+    "/generate",
+    response_model=GenerateRes,
+    response_model_exclude_none=True,
+    status_code=status.HTTP_200_OK,
+    summary="Gemini 호출(텍스트/JSON)",
+    description="mode=json이면 JSON만 반환하도록 유도된 프롬프트로 호출합니다.",
+)
+async def post_generate(req: GenerateReq, response: Response,
+                        x_request_id: str | None = Header(default=None, alias="X-Request-Id")):
+    """
+    LLM 요청 처리 엔드포인트
+    - mode에 따라 JSON/텍스트 호출 분기
+    - X-Request-Id를 응답 헤더로 전달(요청 추적)
+    - Cache-Control: no-store (민감 데이터 캐싱 방지)
+    """
+    system = f"Task: {req.task}. Keep outputs concise for teachers."
+    try:
+        # mode에 따라 호출 분기
+        if req.mode == "json":
+            out = await generate_json(system, req.prompt, **(req.options or {}))
+        else:
+            out = await generate_text(system, req.prompt, **(req.options or {}))
 
-    result = []
-    with open(REPORTS_CSV_PATH, encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            student_id = row["student_id"]
-            student_name = STUDENT_NAME_MAP.get(student_id, "이름 없음")
-            summary_text = row.get("summary") or "요약 정보 없음"
+        # 응답 헤더 처리
+        if x_request_id:
+            response.headers["X-Request-Id"] = x_request_id
+        response.headers["Cache-Control"] = "no-store"
 
-            item = {
-                "id": int(row["id"]),
-                "title": f"상담 유형 - {row['type']}",
-                "student_query": row.get("content_raw", "내용 없음"),
-                "counselor_answer": summary_text,
-                "date": row.get("date", "날짜 없음"),
-                "student_name": student_name,
-                "worry_tags": extract_tags(summary_text)
-            }
-            result.append(item)
-
-    return result
-
-# ✅ /llm/summary/{report_id} 단건 조회
-@router.get("/summary/{report_id}", response_model=LLMResponse)
-def get_llm_summary_by_id(report_id: int):
-    if not os.path.exists(REPORTS_CSV_PATH):
-        raise HTTPException(status_code=404, detail="reports.csv 파일을 찾을 수 없습니다.")
-
-    with open(REPORTS_CSV_PATH, encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if int(row["id"]) == report_id:
-                student_id = row["student_id"]
-                student_name = STUDENT_NAME_MAP.get(student_id, "이름 없음")
-                summary_text = row.get("summary") or "요약 정보 없음"
-
-                return {
-                    "id": int(row["id"]),
-                    "title": f"상담 유형 - {row['type']}",
-                    "student_query": row.get("content_raw", "내용 없음"),
-                    "counselor_answer": summary_text,
-                    "date": row.get("date", "날짜 없음"),
-                    "student_name": student_name,
-                    "worry_tags": extract_tags(summary_text)
-                }
-
-    raise HTTPException(status_code=404, detail=f"id가 {report_id}인 데이터를 찾을 수 없습니다.")
-
-# ✅ 간단한 키워드 태깅 함수
-KEYWORDS = ["진로", "불안", "자신감", "성격", "관계", "학업", "건강"]
-def extract_tags(text: str) -> List[str]:
-    tags = []
-    for kw in KEYWORDS:
-        if kw in text:
-            tags.append(kw)
-    return tags or ["기타"]
+        return {"ok": True, "data": out["content"], "usage": out.get("usage")}
+    except Exception as e:
+        # LLM 호출 실패 시 502 반환
+        raise HTTPException(502, f"Gemini 호출 실패: {e}")

@@ -1,11 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# ✅ 미들웨어 임포트
+from middlewares.timing import TimingMiddleware
+from middlewares.error_handler import add_error_handlers
+
 # ✅ 라우터 임포트
 from routers import (
-    attendance, auth, classes, events, grades, llm, meetings,
-    notices, reports, school_report, students, subjects, teachers,
-    test_scores, tests
+    attendance, auth, classes, events, grades,
+    llm,  # ← Gemini API 호출 라우터
+    meetings, notices, reports, school_report,
+    students, subjects, teachers, test_scores, tests
 )
 
 app = FastAPI(
@@ -28,22 +33,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ✅ 요청 지연 측정 미들웨어 (응답 헤더 X-Latency-Ms 추가)
+app.add_middleware(TimingMiddleware)
+
+# ✅ 전역 에러 핸들러 등록 (일관된 JSON 에러 포맷)
+add_error_handlers(app)
+
 # ✅ /v1 프리픽스 라우터 등록
-app.include_router(attendance.router, prefix="/v1/attendance")
-app.include_router(auth.router, prefix="/v1/auth")
-app.include_router(classes.router, prefix="/v1/classes")
-app.include_router(events.router, prefix="/v1/events")
-app.include_router(grades.router, prefix="/v1/grades")
-app.include_router(llm.router, prefix="/v1/llm")
-app.include_router(meetings.router, prefix="/v1/meetings")
-app.include_router(notices.router, prefix="/v1/notices")
-app.include_router(reports.router, prefix="/v1/reports")
-app.include_router(school_report.router, prefix="/v1/school-report")
-app.include_router(students.router, prefix="/v1/students")
-app.include_router(subjects.router, prefix="/v1/subjects")
-app.include_router(teachers.router, prefix="/v1/teachers")
-app.include_router(test_scores.router, prefix="/v1/test-scores")
-app.include_router(tests.router, prefix="/v1/tests")
+app.include_router(attendance.router,     prefix="/v1/attendance")
+app.include_router(auth.router,           prefix="/v1/auth")
+app.include_router(classes.router,        prefix="/v1/classes")
+app.include_router(events.router,         prefix="/v1/events")
+app.include_router(grades.router,         prefix="/v1/grades")
+app.include_router(llm.router,            prefix="/v1/llm")          # ✅ 새 Gemini 라우터
+app.include_router(meetings.router,       prefix="/v1/meetings")
+app.include_router(notices.router,        prefix="/v1/notices")
+app.include_router(reports.router,        prefix="/v1/reports")
+app.include_router(school_report.router,  prefix="/v1/school-report")
+app.include_router(students.router,       prefix="/v1/students")
+app.include_router(subjects.router,       prefix="/v1/subjects")
+app.include_router(teachers.router,       prefix="/v1/teachers")
+app.include_router(test_scores.router,    prefix="/v1/test-scores")
+app.include_router(tests.router,          prefix="/v1/tests")
 
 # ✅ 헬스체크 엔드포인트
 @app.get("/health")
