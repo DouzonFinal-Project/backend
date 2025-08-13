@@ -66,11 +66,12 @@ class Settings(BaseSettings):
     # =========================
     # LLM (Gemini only)
     # =========================
-    GEMINI_MODEL: str = "gemini-1.5-pro"
+    GEMINI_MODEL: str = "gemini-2.5-Flash"
     GEMINI_API_KEY: str  # 필수
     LLM_TIMEOUT: int = 25
     LLM_TEMPERATURE: float = 0.2
     LLM_MAX_TOKENS: int = 1024
+    LLM_INTERNAL_TOKEN: str = "dev-llm-token"
 
     # =========================
     # Vector DB (Milvus)
