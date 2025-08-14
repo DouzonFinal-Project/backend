@@ -64,6 +64,13 @@ class Settings(BaseSettings):
         return self.DATABASE_URL
 
     # =========================
+    # Front API
+    # =========================
+    FRONT_API_BASE_URL: str
+    FRONT_INTERNAL_TOKEN: str
+
+
+    # =========================
     # LLM (Gemini only)
     # =========================
     GEMINI_MODEL: str = "gemini-2.5-Flash"
@@ -71,7 +78,8 @@ class Settings(BaseSettings):
     LLM_TIMEOUT: int = 25
     LLM_TEMPERATURE: float = 0.2
     LLM_MAX_TOKENS: int = 1024
-    LLM_INTERNAL_TOKEN: str = "dev-llm-token"
+    LLM_API_BASE_URL: str  
+    LLM_INTERNAL_TOKEN: str 
 
     # =========================
     # Vector DB (Milvus)

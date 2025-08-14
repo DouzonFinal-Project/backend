@@ -10,7 +10,8 @@ from routers import (
     attendance, auth, classes, events, grades,
     llm,  # ← Gemini API 호출 라우터
     meetings, notices, reports, school_report,
-    students, subjects, teachers, test_scores, tests
+    students, subjects, teachers, test_scores, tests,
+    front_proxy 
 )
 
 app = FastAPI(
@@ -55,6 +56,7 @@ app.include_router(subjects.router,       prefix="/v1/subjects")
 app.include_router(teachers.router,       prefix="/v1/teachers")
 app.include_router(test_scores.router,    prefix="/v1/test-scores")
 app.include_router(tests.router,          prefix="/v1/tests")
+app.include_router(front_proxy.router,    prefix="/v1/front")
 
 # ✅ 헬스체크 엔드포인트
 @app.get("/health")

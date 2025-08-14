@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from typing import Any, Optional
 from services.llm.llm_gemini import generate_json, generate_text
 
-router = APIRouter(prefix="/llm", tags=["LLM"])
+router = APIRouter(tags=["LLM"])
 
 # 요청 모델
 class GenerateReq(BaseModel):
