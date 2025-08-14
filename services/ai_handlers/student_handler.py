@@ -5,7 +5,7 @@ from config.settings import settings
 
 # Gemini API 설정
 genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
 def handle_student_query(message: str, db: Session):
     """학생 명단 조회 처리"""
