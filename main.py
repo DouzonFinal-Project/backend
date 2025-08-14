@@ -9,9 +9,10 @@ from middlewares.error_handler import add_error_handlers
 from routers import (
     attendance, auth, classes, events, grades,
     llm,  # ← Gemini API 호출 라우터
+    ai_chatbot,  # ← AI 챗봇 라우터
     meetings, notices, reports, school_report,
     students, subjects, teachers, test_scores, tests,
-    front_proxy 
+    front_proxy, pdf_reports
 )
 
 app = FastAPI(
@@ -57,6 +58,8 @@ app.include_router(teachers.router,       prefix="/v1/teachers")
 app.include_router(test_scores.router,    prefix="/v1/test-scores")
 app.include_router(tests.router,          prefix="/v1/tests")
 app.include_router(front_proxy.router,    prefix="/v1/front")
+app.include_router(ai_chatbot.router,     prefix="/v1/ai-chatbot")   # ✅ 새 AI 통합 라우터          
+app.include_router(pdf_reports.router,    prefix="/v1/pdf-reports")  # ✅ PDF 생성 라우터
 
 # ✅ 헬스체크 엔드포인트
 @app.get("/health")

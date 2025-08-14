@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>상담 보고서</title>
+    <style>
+        @page {
+            margin: 2cm;
+            size: A4;
+        }
+        
+        body {
+            font-family: '맑은 고딕', sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #007bff;
+            margin: 0;
+            font-size: 28px;
+        }
+        
+        .info-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .info-section h2 {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
+        }
+        
+        .student-info table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .student-info td {
+            padding: 8px;
+            border: 1px solid #ddd;
+        }
+        
+        .student-info td:first-child {
+            background-color: #e9ecef;
+            font-weight: bold;
+            width: 150px;
+        }
+        
+        .ai-analysis {
+            border-left: 4px solid #28a745;
+            padding-left: 15px;
+            background-color: #f8fff9;
+            margin: 20px 0;
+        }
+        
+        .report-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        
+        .report-date {
+            color: #6c757d;
+            font-size: 14px;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>개별 상담 보고서</h1>
+        <p>생성일: {{ generated_date }}</p>
+    </div>
+    
+    <div class="info-section student-info">
+        <h2>학생 기본 정보</h2>
+        <table>
+            <tr>
+                <td>이름</td>
+                <td>{{ student.student_name }}</td>
+            </tr>
+            <tr>
+                <td>학급</td>
+                <td>{{ student.class_id }}반</td>
+            </tr>
+            <tr>
+                <td>성별</td>
+                <td>{{ student.gender }}</td>
+            </tr>
+            <tr>
+                <td>연락처</td>
+                <td>{{ student.phone }}</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="info-section">
+        <h2>성적 현황</h2>
+        {% if grades %}
+            <p>총 {{ grades|length }}개 과목 성적 보유</p>
+            {% for grade in grades[:5] %}
+                <p>• 과목 ID {{ grade.subject_id }}: {{ grade.average_score }}점 ({{ grade.grade_letter }})</p>
+            {% endfor %}
+        {% else %}
+            <p>성적 정보가 없습니다.</p>
+        {% endif %}
+    </div>
+    
+    <div class="ai-analysis">
+        <h2>🤖 AI 종합 분석</h2>
+        <p>{{ ai_analysis }}</p>
+    </div>
+    
+    <div class="info-section">
+        <h2>상담 기록</h2>
+        {% if reports %}
+            {% for report in reports %}
+                <div class="report-item">
+                    <div class="report-date">{{ report.date }} - {{ report.type }}</div>
+                    <h4>{{ report.summary or '요약 없음' }}</h4>
+                    <p>{{ report.content_raw[:200] }}{% if report.content_raw|length > 200 %}...{% endif %}</p>
+                    {% if report.emotion %}
+                        <p><strong>감정:</strong> {{ report.emotion }}</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>상담 기록이 없습니다.</p>
+        {% endif %}
+    </div>
+    
+    <div class="footer">
+        <p>본 보고서는 AI 분석을 포함하고 있으며, 참고용으로만 사용하시기 바랍니다.</p>
+    </div>
+</body>
+</html>
