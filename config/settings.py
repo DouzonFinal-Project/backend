@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     DB_HOST: str         # 데이터베이스 호스트
     DB_PORT: str         # 포트 번호
     DB_NAME: str         # 데이터베이스 이름
+    GEMINI_API_KEY: str  # Gemini API 키
 
     # ✅ 전체 접속 URL을 동적으로 생성
     @property

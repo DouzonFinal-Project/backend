@@ -16,7 +16,8 @@ from routers import (
     grades,
     meetings,
     notices,
-    auth
+    auth,
+    ai
 )
 
 # 🔽 DB 관련 import
@@ -58,6 +59,7 @@ app.include_router(grades.router, prefix="/api")
 app.include_router(meetings.router, prefix="/api")
 app.include_router(notices.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
 
 # ✅ 기본 테스트 엔드포인트
 @app.get("/")
