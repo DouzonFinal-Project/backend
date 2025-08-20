@@ -42,24 +42,24 @@ app.add_middleware(TimingMiddleware)
 add_error_handlers(app)
 
 # ✅ /v1 프리픽스 라우터 등록
-app.include_router(attendance.router,     prefix="/v1/attendance")
-app.include_router(auth.router,           prefix="/v1/auth")
-app.include_router(classes.router,        prefix="/v1/classes")
-app.include_router(events.router,         prefix="/v1/events")
-app.include_router(grades.router,         prefix="/v1/grades")
-app.include_router(llm.router,            prefix="/v1/llm")          # ✅ 새 Gemini 라우터
-app.include_router(meetings.router,       prefix="/v1/meetings")
-app.include_router(notices.router,        prefix="/v1/notices")
-app.include_router(reports.router,        prefix="/v1/reports")
-app.include_router(school_report.router,  prefix="/v1/school-report")
-app.include_router(students.router,       prefix="/v1/students")
-app.include_router(subjects.router,       prefix="/v1/subjects")
-app.include_router(teachers.router,       prefix="/v1/teachers")
-app.include_router(test_scores.router,    prefix="/v1/test-scores")
-app.include_router(tests.router,          prefix="/v1/tests")
-app.include_router(front_proxy.router,    prefix="/v1/front")
-app.include_router(ai_chatbot.router,     prefix="/v1/ai-chatbot")   # ✅ 새 AI 통합 라우터          
-app.include_router(pdf_reports.router,    prefix="/v1/pdf-reports")  # ✅ PDF 생성 라우터
+app.include_router(attendance.router,     prefix="/v1")
+app.include_router(auth.router,           prefix="/v1")
+app.include_router(classes.router,        prefix="/v1")
+app.include_router(events.router,         prefix="/v1")
+app.include_router(grades.router,         prefix="/v1")
+app.include_router(llm.router,            prefix="/v1")   # ✅ 새 Gemini 라우터
+app.include_router(meetings.router,       prefix="/v1")
+app.include_router(notices.router,        prefix="/v1")
+app.include_router(reports.router,        prefix="/v1")
+app.include_router(school_report.router,  prefix="/v1")
+app.include_router(students.router,       prefix="/v1")
+app.include_router(subjects.router,       prefix="/v1")
+app.include_router(teachers.router,       prefix="/v1")
+app.include_router(test_scores.router,    prefix="/v1")
+app.include_router(tests.router,          prefix="/v1")
+app.include_router(front_proxy.router,    prefix="/v1")
+app.include_router(ai_chatbot.router,     prefix="/v1")   # ✅ 새 AI 통합 라우터          
+app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라우터
 
 # ✅ 헬스체크 엔드포인트
 @app.get("/health")
