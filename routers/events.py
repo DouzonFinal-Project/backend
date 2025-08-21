@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database.db import SessionLocal
 from models.events import Event as EventModel
 from schemas.events import Event as EventSchema
@@ -13,6 +14,7 @@ def get_db():
     finally:
         db.close()
 
+
 # ✅ [CREATE] 학사일정 추가
 @router.post("/", response_model=EventSchema)
 def create_event(event: EventSchema, db: Session = Depends(get_db)):
@@ -22,10 +24,35 @@ def create_event(event: EventSchema, db: Session = Depends(get_db)):
     db.refresh(db_event)
     return db_event
 
+
 # ✅ [READ] 전체 학사일정 조회
 @router.get("/", response_model=list[EventSchema])
 def read_events(db: Session = Depends(get_db)):
     return db.query(EventModel).all()
+
+
+# ✅ [MONTHLY] 특정 달 일정 조회 (정적 라우트 → 동적 라우트보다 먼저 배치)
+@router.get("/monthly", response_model=list[EventSchema])
+def get_monthly_events(year: int, month: int, db: Session = Depends(get_db)):
+    events = (
+        db.query(EventModel)
+        .filter(func.year(EventModel.date) == year)
+        .filter(func.month(EventModel.date) == month)
+        .all()
+    )
+    return events
+
+
+# ✅ [WEEKLY] 특정 기간(주간) 일정 조회
+@router.get("/weekly", response_model=list[EventSchema])
+def get_weekly_events(start_date: str, end_date: str, db: Session = Depends(get_db)):
+    events = (
+        db.query(EventModel)
+        .filter(EventModel.date.between(start_date, end_date))
+        .all()
+    )
+    return events
+
 
 # ✅ [READ] 학사일정 상세 조회
 @router.get("/{event_id}", response_model=EventSchema)
@@ -34,6 +61,7 @@ def read_event(event_id: int, db: Session = Depends(get_db)):
     if event is None:
         raise HTTPException(status_code=404, detail="학사일정을 찾을 수 없습니다")
     return event
+
 
 # ✅ [UPDATE] 학사일정 수정
 @router.put("/{event_id}", response_model=EventSchema)
@@ -46,6 +74,7 @@ def update_event(event_id: int, updated: EventSchema, db: Session = Depends(get_
     db.commit()
     db.refresh(event)
     return event
+
 
 # ✅ [DELETE] 학사일정 삭제
 @router.delete("/{event_id}")

@@ -1,6 +1,16 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
+from sqlalchemy.orm import Session
+from database.db import SessionLocal
 from services.ai_client import ai_client, AIClientError
+# ✅ 신규 핸들러들 추가
+from services.ai_handlers import (
+    meeting_handler,
+    event_handler,
+    attendance_handler,
+    notice_handler,
+    report_handler
+)
 from schemas.ai_schemas import (
     CounselingRecordAdd, CounselingRecordSearch,
     CounselingChatRequest, QuickChatRequest,
@@ -11,10 +21,82 @@ from schemas.ai_schemas import (
 router = APIRouter(prefix="/ai", tags=["AI 챗봇"])
 
 
-# ===============================================================
-# 상담 기록 관리 (Milvus)
-# ===============================================================
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
+
+# ===============================================================
+# 회의록 질의 (Meeting Handler)
+# ===============================================================
+@router.post("/meetings/query", response_model=AIResponse)
+async def query_meetings(message: str, db: Session = Depends(get_db)):
+    """회의록 요약/액션 아이템 질의"""
+    try:
+        result = meeting_handler.handle_meeting_query(message, db)
+        return AIResponse(status="success", data=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===============================================================
+# 일정 질의 (Event Handler)
+# ===============================================================
+@router.post("/events/query", response_model=AIResponse)
+async def query_events(message: str, db: Session = Depends(get_db)):
+    """주간/월간 일정 질의"""
+    try:
+        result = event_handler.handle_event_query(message, db)
+        return AIResponse(status="success", data=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===============================================================
+# 출결 질의 (Attendance Handler)
+# ===============================================================
+@router.post("/attendance/query", response_model=AIResponse)
+async def query_attendance(message: str, db: Session = Depends(get_db)):
+    """출결 요약/학생/반 질의"""
+    try:
+        result = attendance_handler.handle_attendance_query(message, db)
+        return AIResponse(status="success", data=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===============================================================
+# 공지 질의 (Notice Handler)
+# ===============================================================
+@router.post("/notices/query", response_model=AIResponse)
+async def query_notices(message: str, db: Session = Depends(get_db)):
+    """공지사항 질의 (중요/최근/주간 등)"""
+    try:
+        result = notice_handler.handle_notice_query(message, db)
+        return AIResponse(status="success", data=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===============================================================
+# 통합 리포트 질의 (Report Handler)
+# ===============================================================
+@router.post("/reports/query", response_model=AIResponse)
+async def query_reports(message: str, db: Session = Depends(get_db)):
+    """통합 리포트 생성 (학급/학생/학교 단위)"""
+    try:
+        result = report_handler.handle_report_query(message, db)
+        return AIResponse(status="success", data=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===============================================================
+# 기존 상담 기록 관리 (Milvus)
+# ===============================================================
 @router.post("/counseling/records", response_model=AIResponse)
 async def add_counseling_record(record: CounselingRecordAdd):
     """상담 기록 추가"""
@@ -69,12 +151,10 @@ async def get_collection_stats():
 # ===============================================================
 # AI 채팅 (Gemini)
 # ===============================================================
-
 @router.post("/chat/counseling", response_model=AIResponse)
 async def counseling_chat(request: CounselingChatRequest):
     """전문 상담 채팅 (RAG 지원)"""
     try:
-        # ConversationMessage를 dict로 변환
         conversation_history = None
         if request.conversation_history:
             conversation_history = [msg.model_dump() for msg in request.conversation_history]
@@ -92,7 +172,6 @@ async def counseling_chat(request: CounselingChatRequest):
 async def quick_chat(request: QuickChatRequest):
     """간단 채팅 (RAG 없이)"""
     try:
-        # ConversationMessage를 dict로 변환
         conversation_history = None
         if request.conversation_history:
             conversation_history = [msg.model_dump() for msg in request.conversation_history]
@@ -120,12 +199,9 @@ async def create_counseling_plan(request: CounselingPlanRequest):
 async def summarize_conversation(request: ConversationSummaryRequest):
     """대화 내용 요약"""
     try:
-        # ConversationMessage를 dict로 변환
         conversation_history = [msg.model_dump() for msg in request.conversation_history]
-        
         request_data = request.model_dump()
         request_data["conversation_history"] = conversation_history
-        
         result = ai_client.summarize_conversation(**request_data)
         return AIResponse(status="success", data=result)
     except AIClientError as e:
@@ -145,7 +221,6 @@ async def extract_keywords(request: KeywordExtractionRequest):
 # ===============================================================
 # 가이드 및 템플릿 조회
 # ===============================================================
-
 @router.get("/templates", response_model=AIResponse)
 async def get_chat_templates():
     """상담 템플릿 조회"""
@@ -169,7 +244,6 @@ async def get_counseling_guidelines():
 # ===============================================================
 # 시스템 상태 및 통계
 # ===============================================================
-
 @router.get("/status", response_model=AIResponse)
 async def get_ai_service_status():
     """AI 서비스 상태 확인"""

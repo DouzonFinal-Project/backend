@@ -13,6 +13,7 @@ def get_db():
     finally:
         db.close()
 
+
 # ✅ [CREATE] 공지사항 추가
 @router.post("/", response_model=NoticeSchema)
 def create_notice(notice: NoticeSchema, db: Session = Depends(get_db)):
@@ -22,10 +23,24 @@ def create_notice(notice: NoticeSchema, db: Session = Depends(get_db)):
     db.refresh(db_notice)
     return db_notice
 
+
 # ✅ [READ] 전체 공지사항 조회
 @router.get("/", response_model=list[NoticeSchema])
 def read_notices(db: Session = Depends(get_db)):
     return db.query(NoticeModel).all()
+
+
+# ✅ [FILTER] 중요 공지만 조회
+@router.get("/important", response_model=list[NoticeSchema])
+def read_important_notices(db: Session = Depends(get_db)):
+    return db.query(NoticeModel).filter(NoticeModel.is_important == True).all()
+
+
+# ✅ [RECENT] 최신 공지 조회
+@router.get("/recent", response_model=list[NoticeSchema])
+def read_recent_notices(limit: int = 5, db: Session = Depends(get_db)):
+    return db.query(NoticeModel).order_by(NoticeModel.created_at.desc()).limit(limit).all()
+
 
 # ✅ [READ] 공지사항 상세 조회
 @router.get("/{notice_id}", response_model=NoticeSchema)
@@ -34,6 +49,7 @@ def read_notice(notice_id: int, db: Session = Depends(get_db)):
     if notice is None:
         raise HTTPException(status_code=404, detail="공지사항을 찾을 수 없습니다")
     return notice
+
 
 # ✅ [UPDATE] 공지사항 수정
 @router.put("/{notice_id}", response_model=NoticeSchema)
@@ -46,6 +62,7 @@ def update_notice(notice_id: int, updated: NoticeSchema, db: Session = Depends(g
     db.commit()
     db.refresh(notice)
     return notice
+
 
 # ✅ [DELETE] 공지사항 삭제
 @router.delete("/{notice_id}")
