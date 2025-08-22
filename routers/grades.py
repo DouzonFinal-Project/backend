@@ -20,6 +20,11 @@ def get_db():
     finally:
         db.close()
 
+
+# ---------------------------------------------------------
+# [STATIC ROUTES - ANALYSIS / SUMMARY]
+# ---------------------------------------------------------
+
 # ✅ [PIVOT] 반(class_id) 기준으로 학생별 성적 피벗 출력
 @router.get("/pivot")
 def get_class_grades(class_id: int, db: Session = Depends(get_db)):
@@ -57,41 +62,6 @@ def get_class_grades(class_id: int, db: Session = Depends(get_db)):
     return result
 
 
-# ✅ [READ] 특정 학생의 성적 피벗 조회
-@router.get("/student/{student_id}")
-def get_student_grades(student_id: int, db: Session = Depends(get_db)):
-    student = db.query(StudentModel).filter(StudentModel.id == student_id).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="학생을 찾을 수 없습니다.")
-
-    results = (
-        db.query(
-            SubjectModel.name.label("subject_name"),
-            GradeModel.average_score
-        )
-        .join(SubjectModel, SubjectModel.id == GradeModel.subject_id)
-        .filter(GradeModel.student_id == student_id)
-        .all()
-    )
-
-    if not results:
-        raise HTTPException(status_code=404, detail="해당 학생의 성적이 없습니다.")
-
-    scores = {r.subject_name: r.average_score for r in results}
-    avg_score = round(sum(scores.values()) / len(scores), 1)
-
-    class_info = db.query(ClassModel).filter(ClassModel.id == student.class_id).first()
-    class_name = f"{class_info.grade}학년 {class_info.class_num}반" if class_info else "학급 정보 없음"
-
-    return {
-        "student_id": student.id,
-        "name": student.student_name,
-        "class": class_name,
-        "scores": scores,
-        "개인평균": avg_score
-    }
-
-
 # ✅ [RANKING] 반 내 평균 점수 기준 성적 등수 조회
 @router.get("/rankings")
 def get_class_rankings(class_id: int, db: Session = Depends(get_db)):
@@ -124,14 +94,12 @@ def get_class_rankings(class_id: int, db: Session = Depends(get_db)):
 # ✅ [SUMMARY] 반 전체 평균 점수
 @router.get("/summary")
 def get_class_average_score(class_id: int, db: Session = Depends(get_db)):
-    # 반 학생 ID 리스트 가져오기
     student_ids = db.query(StudentModel.id).filter(StudentModel.class_id == class_id).all()
     student_ids = [s[0] for s in student_ids]
 
     if not student_ids:
         raise HTTPException(status_code=404, detail="해당 반에 학생이 없습니다.")
 
-    # 해당 학생들의 모든 성적 점수 평균 계산
     avg_result = (
         db.query(func.avg(GradeModel.average_score))
         .filter(GradeModel.student_id.in_(student_ids))
@@ -145,6 +113,7 @@ def get_class_average_score(class_id: int, db: Session = Depends(get_db)):
         "average_score": avg_score
     }
 
+
 # ✅ [DISTRIBUTION] 반(class_id) 기준 점수 구간별 학생 수
 @router.get("/distribution")
 def get_score_distribution(class_id: int, db: Session = Depends(get_db)):
@@ -152,7 +121,6 @@ def get_score_distribution(class_id: int, db: Session = Depends(get_db)):
     if not students:
         raise HTTPException(status_code=404, detail="해당 반의 학생 정보를 찾을 수 없습니다.")
 
-    # 점수 구간 초기화
     distribution = {
         "0~59": 0,
         "60~69": 0,
@@ -168,7 +136,6 @@ def get_score_distribution(class_id: int, db: Session = Depends(get_db)):
 
         avg_score = sum([g.average_score for g in grades]) / len(grades)
 
-        # 구간 분류
         if avg_score < 60:
             distribution["0~59"] += 1
         elif avg_score < 70:
@@ -217,6 +184,49 @@ def get_low_performers(class_id: int, threshold: float = 65.0, db: Session = Dep
     }
 
 
+# ---------------------------------------------------------
+# [PARTIALLY DYNAMIC ROUTES - PREFIXED]
+# ---------------------------------------------------------
+
+# ✅ [READ] 특정 학생의 성적 피벗 조회
+@router.get("/student/{student_id}")
+def get_student_grades(student_id: int, db: Session = Depends(get_db)):
+    student = db.query(StudentModel).filter(StudentModel.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="학생을 찾을 수 없습니다.")
+
+    results = (
+        db.query(
+            SubjectModel.name.label("subject_name"),
+            GradeModel.average_score
+        )
+        .join(SubjectModel, SubjectModel.id == GradeModel.subject_id)
+        .filter(GradeModel.student_id == student_id)
+        .all()
+    )
+
+    if not results:
+        raise HTTPException(status_code=404, detail="해당 학생의 성적이 없습니다.")
+
+    scores = {r.subject_name: r.average_score for r in results}
+    avg_score = round(sum(scores.values()) / len(scores), 1)
+
+    class_info = db.query(ClassModel).filter(ClassModel.id == student.class_id).first()
+    class_name = f"{class_info.grade}학년 {class_info.class_num}반" if class_info else "학급 정보 없음"
+
+    return {
+        "student_id": student.id,
+        "name": student.student_name,
+        "class": class_name,
+        "scores": scores,
+        "개인평균": avg_score
+    }
+
+
+# ---------------------------------------------------------
+# [CRUD BASE ROUTES - STATIC]
+# ---------------------------------------------------------
+
 # ✅ [CREATE] 성적 정보 추가
 @router.post("/", response_model=GradeSchema)
 def create_grade(grade: GradeSchema, db: Session = Depends(get_db)):
@@ -232,6 +242,10 @@ def create_grade(grade: GradeSchema, db: Session = Depends(get_db)):
 def read_grades(db: Session = Depends(get_db)):
     return db.query(GradeModel).all()
 
+
+# ---------------------------------------------------------
+# [DYNAMIC ROUTES - MUST COME LAST]
+# ---------------------------------------------------------
 
 # ✅ [READ] 특정 성적 조회
 @router.get("/{grade_id}", response_model=GradeSchema)

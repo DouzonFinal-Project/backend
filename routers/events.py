@@ -15,7 +15,11 @@ def get_db():
         db.close()
 
 
-# ✅ [CREATE] 학사일정 추가
+# ==========================================================
+# [1단계] CRUD 기본 라우터 - 루트 경로 우선 처리
+# ==========================================================
+
+# ✅ [CREATE] 학사일정 추가 - POST 메서드이므로 순서 무관
 @router.post("/", response_model=EventSchema)
 def create_event(event: EventSchema, db: Session = Depends(get_db)):
     db_event = EventModel(**event.model_dump())
@@ -25,11 +29,15 @@ def create_event(event: EventSchema, db: Session = Depends(get_db)):
     return db_event
 
 
-# ✅ [READ] 전체 학사일정 조회
+# ✅ [READ] 전체 학사일정 조회 - 반드시 동적 라우터보다 먼저!
 @router.get("/", response_model=list[EventSchema])
 def read_events(db: Session = Depends(get_db)):
     return db.query(EventModel).all()
 
+
+# ==========================================================
+# [2단계] 정적 라우터 - 구체적인 경로들
+# ==========================================================
 
 # ✅ [MONTHLY] 특정 달 일정 조회 (정적 라우트 → 동적 라우트보다 먼저 배치)
 @router.get("/monthly", response_model=list[EventSchema])
@@ -53,6 +61,10 @@ def get_weekly_events(start_date: str, end_date: str, db: Session = Depends(get_
     )
     return events
 
+
+# ==========================================================
+# [3단계] 완전 동적 라우터 - 맨 마지막에 배치!
+# ==========================================================
 
 # ✅ [READ] 학사일정 상세 조회
 @router.get("/{event_id}", response_model=EventSchema)

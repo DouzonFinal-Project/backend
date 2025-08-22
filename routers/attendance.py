@@ -17,6 +17,30 @@ def get_db():
         db.close()
 
 
+# ==========================================================
+# [1단계] CRUD 기본 라우터 - 루트 경로 우선 처리
+# ==========================================================
+
+# ✅ [CREATE] 출결 추가 - POST 메서드이므로 순서 무관
+@router.post("/", response_model=AttendanceSchema)
+def create_attendance(attendance: AttendanceSchema, db: Session = Depends(get_db)):
+    db_attendance = AttendanceModel(**attendance.model_dump())
+    db.add(db_attendance)
+    db.commit()
+    db.refresh(db_attendance)
+    return db_attendance
+
+
+# ✅ [READ] 전체 출결 조회 - 반드시 동적 라우터보다 먼저!
+@router.get("/", response_model=list[AttendanceSchema])
+def read_attendance_list(db: Session = Depends(get_db)):
+    return db.query(AttendanceModel).all()
+
+
+# ==========================================================
+# [2단계] 정적 요약 라우터 - 구체적인 경로들
+# ==========================================================
+
 # ✅ [요약] 특정 날짜 기준 출석 현황 요약
 @router.get("/daily-summary")
 def get_daily_attendance_summary(
@@ -123,6 +147,10 @@ def get_monthly_attendance_summary(
     }
 
 
+# ==========================================================
+# [3단계] 혼합 라우터 - 일부 정적, 일부 동적
+# ==========================================================
+
 # ✅ [학생 요약] 특정 학생의 누적 출결 현황
 @router.get("/student/{student_id}/summary")
 def get_student_attendance_summary(student_id: int, db: Session = Depends(get_db)):
@@ -171,21 +199,9 @@ def get_class_attendance_summary(class_id: int, db: Session = Depends(get_db)):
     }
 
 
-# ✅ [CREATE] 출결 추가
-@router.post("/", response_model=AttendanceSchema)
-def create_attendance(attendance: AttendanceSchema, db: Session = Depends(get_db)):
-    db_attendance = AttendanceModel(**attendance.model_dump())
-    db.add(db_attendance)
-    db.commit()
-    db.refresh(db_attendance)
-    return db_attendance
-
-
-# ✅ [READ] 전체 출결 조회
-@router.get("/", response_model=list[AttendanceSchema])
-def read_attendance_list(db: Session = Depends(get_db)):
-    return db.query(AttendanceModel).all()
-
+# ==========================================================
+# [4단계] 완전 동적 라우터 - 맨 마지막에 배치!
+# ==========================================================
 
 # ✅ [READ] 출결 상세 조회
 @router.get("/{attendance_id}", response_model=AttendanceSchema)

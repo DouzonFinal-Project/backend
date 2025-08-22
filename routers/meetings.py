@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func, extract
 from database.db import SessionLocal
 from models.meetings import Meeting as MeetingModel
-from schemas.meetings import Meeting, MeetingCreate
+from schemas.meetings import Meeting as MeetingSchema, MeetingCreate
 
-router = APIRouter(prefix="/meetings", tags=["상담기록"])
+router = APIRouter(prefix="/meetings", tags=["상담 기록"])
 
 def get_db():
     db = SessionLocal()
@@ -13,8 +14,12 @@ def get_db():
     finally:
         db.close()
 
-# ✅ [CREATE] 상담기록 추가
-@router.post("/", response_model=Meeting)
+# ==========================================================
+# [1단계] CRUD 기본 라우터 - 루트 경로 우선 처리
+# ==========================================================
+
+# ✅ [CREATE] 상담 기록 추가
+@router.post("/", response_model=MeetingSchema)
 def create_meeting(meeting: MeetingCreate, db: Session = Depends(get_db)):
     db_meeting = MeetingModel(**meeting.model_dump())
     db.add(db_meeting)
@@ -22,37 +27,96 @@ def create_meeting(meeting: MeetingCreate, db: Session = Depends(get_db)):
     db.refresh(db_meeting)
     return db_meeting
 
-# ✅ [READ] 전체 상담기록 조회
-@router.get("/", response_model=list[Meeting])
+# ✅ [READ] 전체 상담 기록 조회
+@router.get("/", response_model=list[MeetingSchema])
 def read_meetings(db: Session = Depends(get_db)):
     return db.query(MeetingModel).all()
 
-# ✅ [READ] 상담기록 상세 조회
-@router.get("/{meeting_id}", response_model=Meeting)
+# ==========================================================
+# [2단계] 정적 라우터 - 구체적인 경로들
+# ==========================================================
+
+# ✅ [SUMMARY] 상담 전체 요약 통계
+@router.get("/summary")
+def meetings_summary(db: Session = Depends(get_db)):
+    total = db.query(func.count(MeetingModel.id)).scalar()
+    latest = db.query(func.max(MeetingModel.date)).scalar()
+    return {"total_meetings": total, "latest_meeting": latest}
+
+# ✅ [READ] 특정 교사 상담 기록 조회
+@router.get("/teacher/{teacher_id}", response_model=list[MeetingSchema])
+def get_meetings_by_teacher(teacher_id: int, db: Session = Depends(get_db)):
+    meetings = db.query(MeetingModel).filter(MeetingModel.teacher_id == teacher_id).all()
+    if not meetings:
+        raise HTTPException(status_code=404, detail="해당 교사의 상담 기록이 없습니다")
+    return meetings
+
+# ✅ [READ] 특정 학생 상담 기록 조회
+@router.get("/student/{student_id}", response_model=list[MeetingSchema])
+def get_meetings_by_student(student_id: int, db: Session = Depends(get_db)):
+    meetings = db.query(MeetingModel).filter(MeetingModel.student_id == student_id).all()
+    if not meetings:
+        raise HTTPException(status_code=404, detail="해당 학생의 상담 기록이 없습니다")
+    return meetings
+
+# ==========================================================
+# [3단계] 혼합 라우터 - 일부 정적, 일부 동적
+# ==========================================================
+
+# ✅ [READ] 특정 월의 상담 기록 조회
+@router.get("/monthly/{year}/{month}", response_model=list[MeetingSchema])
+def get_meetings_by_month(year: int, month: int, db: Session = Depends(get_db)):
+    meetings = db.query(MeetingModel).filter(
+        extract("year", MeetingModel.date) == year,
+        extract("month", MeetingModel.date) == month
+    ).all()
+    if not meetings:
+        raise HTTPException(status_code=404, detail="해당 월의 상담 기록이 없습니다")
+    return meetings
+
+# ✅ [STATS] 교사별 상담 건수 통계
+@router.get("/stats/teacher/{teacher_id}")
+def get_teacher_meeting_stats(teacher_id: int, db: Session = Depends(get_db)):
+    count = db.query(func.count(MeetingModel.id)).filter(MeetingModel.teacher_id == teacher_id).scalar()
+    return {"teacher_id": teacher_id, "total_meetings": count}
+
+# ✅ [STATS] 학생별 상담 건수/최종 상담일
+@router.get("/stats/student/{student_id}")
+def get_student_meeting_stats(student_id: int, db: Session = Depends(get_db)):
+    total = db.query(func.count(MeetingModel.id)).filter(MeetingModel.student_id == student_id).scalar()
+    last = db.query(func.max(MeetingModel.date)).filter(MeetingModel.student_id == student_id).scalar()
+    return {"student_id": student_id, "total_meetings": total, "last_meeting_date": last}
+
+# ==========================================================
+# [4단계] 완전 동적 라우터 - 맨 마지막에 배치!
+# ==========================================================
+
+# ✅ [READ] 특정 상담 상세 조회
+@router.get("/{meeting_id}", response_model=MeetingSchema)
 def read_meeting(meeting_id: int, db: Session = Depends(get_db)):
     meeting = db.query(MeetingModel).filter(MeetingModel.id == meeting_id).first()
     if meeting is None:
-        raise HTTPException(status_code=404, detail="상담기록을 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail="상담 정보를 찾을 수 없습니다")
     return meeting
 
-# ✅ [UPDATE] 상담기록 수정
-@router.put("/{meeting_id}", response_model=Meeting)
+# ✅ [UPDATE] 상담 기록 수정
+@router.put("/{meeting_id}", response_model=MeetingSchema)
 def update_meeting(meeting_id: int, updated: MeetingCreate, db: Session = Depends(get_db)):
     meeting = db.query(MeetingModel).filter(MeetingModel.id == meeting_id).first()
     if meeting is None:
-        raise HTTPException(status_code=404, detail="상담기록을 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail="상담 정보를 찾을 수 없습니다")
     for key, value in updated.model_dump().items():
         setattr(meeting, key, value)
     db.commit()
     db.refresh(meeting)
     return meeting
 
-# ✅ [DELETE] 상담기록 삭제
+# ✅ [DELETE] 상담 기록 삭제
 @router.delete("/{meeting_id}")
 def delete_meeting(meeting_id: int, db: Session = Depends(get_db)):
     meeting = db.query(MeetingModel).filter(MeetingModel.id == meeting_id).first()
     if meeting is None:
-        raise HTTPException(status_code=404, detail="상담기록을 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail="상담 정보를 찾을 수 없습니다")
     db.delete(meeting)
     db.commit()
-    return {"message": "상담기록이 성공적으로 삭제되었습니다"}
+    return {"message": "✅ 상담 기록이 성공적으로 삭제되었습니다"}
