@@ -7,7 +7,6 @@ from schemas.grades import Grade as GradeSchema
 
 # 추가로 필요한 모델 import
 from models.students import Student as StudentModel
-from models.tests import Test as TestModel
 from models.subjects import Subject as SubjectModel
 from models.classes import Class as ClassModel
 
@@ -42,9 +41,13 @@ def get_class_grades(class_id: int, db: Session = Depends(get_db)):
         for grade in grades:
             subject = db.query(SubjectModel).filter(SubjectModel.id == grade.subject_id).first()
             if subject:
-                scores[subject.name] = grade.average_score
-                total_score += grade.average_score
-                subject_count += 1
+                scores[subject.name] = {
+                    "average_score": grade.average_score,
+                    "grade_letter": grade.grade_letter
+                }
+                if grade.average_score is not None:
+                    total_score += grade.average_score
+                    subject_count += 1
 
         avg_score = round(total_score / subject_count, 1) if subject_count else 0
 
@@ -73,14 +76,15 @@ def get_class_rankings(class_id: int, db: Session = Depends(get_db)):
     for student in students:
         grades = db.query(GradeModel).filter(GradeModel.student_id == student.id).all()
         if grades:
-            avg_score = round(sum([g.average_score for g in grades]) / len(grades), 1)
+            avg_score = round(sum([g.average_score for g in grades if g.average_score is not None]) / len(grades), 1)
         else:
             avg_score = 0.0
 
         results.append({
             "student_id": student.id,
             "name": student.student_name,
-            "avg_score": avg_score
+            "avg_score": avg_score,
+            "grade_letters": [g.grade_letter for g in grades if g.grade_letter]  # 🔹 추가
         })
 
     sorted_results = sorted(results, key=lambda x: x["avg_score"], reverse=True)
@@ -134,7 +138,7 @@ def get_score_distribution(class_id: int, db: Session = Depends(get_db)):
         if not grades:
             continue
 
-        avg_score = sum([g.average_score for g in grades]) / len(grades)
+        avg_score = sum([g.average_score for g in grades if g.average_score is not None]) / len(grades)
 
         if avg_score < 60:
             distribution["0~59"] += 1
@@ -167,13 +171,14 @@ def get_low_performers(class_id: int, threshold: float = 65.0, db: Session = Dep
         if not grades:
             continue
 
-        avg_score = sum([g.average_score for g in grades]) / len(grades)
+        avg_score = sum([g.average_score for g in grades if g.average_score is not None]) / len(grades)
 
         if avg_score < threshold:
             low_performers.append({
                 "student_id": student.id,
                 "name": student.student_name,
-                "average": round(avg_score, 1)
+                "average": round(avg_score, 1),
+                "grade_letters": [g.grade_letter for g in grades if g.grade_letter]  # 🔹 추가
             })
 
     return {
@@ -198,7 +203,8 @@ def get_student_grades(student_id: int, db: Session = Depends(get_db)):
     results = (
         db.query(
             SubjectModel.name.label("subject_name"),
-            GradeModel.average_score
+            GradeModel.average_score,
+            GradeModel.grade_letter
         )
         .join(SubjectModel, SubjectModel.id == GradeModel.subject_id)
         .filter(GradeModel.student_id == student_id)
@@ -208,8 +214,8 @@ def get_student_grades(student_id: int, db: Session = Depends(get_db)):
     if not results:
         raise HTTPException(status_code=404, detail="해당 학생의 성적이 없습니다.")
 
-    scores = {r.subject_name: r.average_score for r in results}
-    avg_score = round(sum(scores.values()) / len(scores), 1)
+    scores = {r.subject_name: {"average_score": r.average_score, "grade_letter": r.grade_letter} for r in results}
+    avg_score = round(sum([r.average_score for r in results if r.average_score is not None]) / len(results), 1)
 
     class_info = db.query(ClassModel).filter(ClassModel.id == student.class_id).first()
     class_name = f"{class_info.grade}학년 {class_info.class_num}반" if class_info else "학급 정보 없음"

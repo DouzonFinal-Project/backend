@@ -1,14 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from database.db import SessionLocal
-from models.attendance import Attendance as AttendanceModel
-from schemas.attendance import Attendance as AttendanceSchema
+from sqlalchemy import func
 from datetime import datetime
 from collections import Counter
-from sqlalchemy import func  # ✅ 월별 통계 계산용
+from typing import List
+
+from database.db import SessionLocal
+from models.attendance import Attendance as AttendanceModel
+from models.students import Student as StudentModel   # ✅ 학급(class_id) 참조용
+from schemas.attendance import Attendance as AttendanceSchema
 
 router = APIRouter(prefix="/attendance", tags=["출결"])
 
+
+# ==========================================================
+# [공통] DB 세션 관리
+# ==========================================================
 def get_db():
     db = SessionLocal()
     try:
@@ -21,7 +28,7 @@ def get_db():
 # [1단계] CRUD 기본 라우터 - 루트 경로 우선 처리
 # ==========================================================
 
-# ✅ [CREATE] 출결 추가 - POST 메서드이므로 순서 무관
+# ✅ [CREATE] 출결 추가
 @router.post("/", response_model=AttendanceSchema)
 def create_attendance(attendance: AttendanceSchema, db: Session = Depends(get_db)):
     db_attendance = AttendanceModel(**attendance.model_dump())
@@ -31,8 +38,8 @@ def create_attendance(attendance: AttendanceSchema, db: Session = Depends(get_db
     return db_attendance
 
 
-# ✅ [READ] 전체 출결 조회 - 반드시 동적 라우터보다 먼저!
-@router.get("/", response_model=list[AttendanceSchema])
+# ✅ [READ] 전체 출결 조회
+@router.get("/", response_model=List[AttendanceSchema])
 def read_attendance_list(db: Session = Depends(get_db)):
     return db.query(AttendanceModel).all()
 
@@ -67,11 +74,11 @@ def get_daily_attendance_summary(
         "결석": 결석,
         "지각": 지각,
         "조회": 조회,
-        "출석률": f"{출석률}%",
+        "출석률": f"{출석률}%"
     }
 
 
-# ✅ [요약] 특정 주간 기준 출결 평균 및 결석 사유 분석
+# ✅ [요약] 특정 주간 출결 평균 및 결석 사유 분석
 @router.get("/weekly-summary")
 def get_weekly_attendance_summary(
     start_date: str = Query(..., description="시작일 (예: 2025-07-22)"),
@@ -118,12 +125,13 @@ def get_weekly_attendance_summary(
 def get_monthly_attendance_summary(
     class_id: int,
     month: str = Query(..., description="YYYY-MM 형식 (예: 2025-07)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     year, mon = map(int, month.split("-"))
     records = (
         db.query(AttendanceModel)
-        .filter(AttendanceModel.class_id == class_id)
+        .join(StudentModel, AttendanceModel.student_id == StudentModel.id)  # ✅ Student 조인
+        .filter(StudentModel.class_id == class_id)
         .filter(func.year(AttendanceModel.date) == year)
         .filter(func.month(AttendanceModel.date) == mon)
         .all()
@@ -178,7 +186,12 @@ def get_student_attendance_summary(student_id: int, db: Session = Depends(get_db
 # ✅ [반 요약] 특정 반 전체 출결 통계
 @router.get("/class/{class_id}/summary")
 def get_class_attendance_summary(class_id: int, db: Session = Depends(get_db)):
-    records = db.query(AttendanceModel).filter(AttendanceModel.class_id == class_id).all()
+    records = (
+        db.query(AttendanceModel)
+        .join(StudentModel, AttendanceModel.student_id == StudentModel.id)  # ✅ Student 조인
+        .filter(StudentModel.class_id == class_id)
+        .all()
+    )
     if not records:
         raise HTTPException(status_code=404, detail="해당 반의 출결 정보가 없습니다.")
 
@@ -218,8 +231,10 @@ def update_attendance(attendance_id: int, updated: AttendanceSchema, db: Session
     attendance = db.query(AttendanceModel).filter(AttendanceModel.id == attendance_id).first()
     if attendance is None:
         raise HTTPException(status_code=404, detail="출결 정보를 찾을 수 없습니다")
+
     for key, value in updated.model_dump().items():
         setattr(attendance, key, value)
+
     db.commit()
     db.refresh(attendance)
     return attendance
@@ -231,6 +246,7 @@ def delete_attendance(attendance_id: int, db: Session = Depends(get_db)):
     attendance = db.query(AttendanceModel).filter(AttendanceModel.id == attendance_id).first()
     if attendance is None:
         raise HTTPException(status_code=404, detail="출결 정보를 찾을 수 없습니다")
+
     db.delete(attendance)
     db.commit()
     return {"message": "출결 정보가 성공적으로 삭제되었습니다"}

@@ -18,7 +18,7 @@ def get_db():
         db.close()
 
 # ==========================================================
-# [1단계] CRUD 기본 라우터 - 루트 경로 우선 처리
+# [1단계] CRUD 기본 라우터
 # ==========================================================
 
 # ✅ [CREATE] 학생 정보 추가
@@ -36,21 +36,18 @@ def read_students(db: Session = Depends(get_db)):
     return db.query(StudentModel).all()
 
 # ==========================================================
-# [2단계] 정적 라우터 - 구체적인 경로들
+# [2단계] 정적 라우터 (검색/통계)
 # ==========================================================
 
-# ✅ [SEARCH] 이름/학번으로 학생 검색
+# ✅ [SEARCH] 이름으로 학생 검색
 @router.get("/search", response_model=list[Student])
 def search_students(
     name: str = Query(None, description="학생 이름"),
-    student_no: str = Query(None, description="학번"),
     db: Session = Depends(get_db)
 ):
     query = db.query(StudentModel)
     if name:
         query = query.filter(StudentModel.student_name.contains(name))
-    if student_no:
-        query = query.filter(StudentModel.student_no == student_no)
     results = query.all()
     if not results:
         raise HTTPException(status_code=404, detail="해당 조건의 학생을 찾을 수 없습니다")
@@ -76,7 +73,7 @@ def student_summary(db: Session = Depends(get_db)):
     }
 
 # ==========================================================
-# [3단계] 혼합 라우터 - 일부 정적, 일부 동적
+# [3단계] 혼합 라우터 (학생별 성적/출결/상담)
 # ==========================================================
 
 # ✅ [SUMMARY] 특정 학생 성적 요약
@@ -85,11 +82,11 @@ def get_student_grade_summary(student_id: int, db: Session = Depends(get_db)):
     grades = db.query(GradeModel).filter(GradeModel.student_id == student_id).all()
     if not grades:
         raise HTTPException(status_code=404, detail="성적 정보가 없습니다")
-    avg_score = sum([g.score for g in grades]) / len(grades)
+    avg_score = sum([g.average_score for g in grades]) / len(grades)
     return {
         "total_subjects": len(grades),
         "average_score": avg_score,
-        "grades": [{"subject": g.subject_id, "score": g.score} for g in grades]
+        "grades": [{"subject": g.subject_id, "score": g.average_score} for g in grades]
     }
 
 # ✅ [SUMMARY] 특정 학생 출결 요약
@@ -114,7 +111,7 @@ def get_student_meetings(student_id: int, db: Session = Depends(get_db)):
     return meetings
 
 # ==========================================================
-# [4단계] 완전 동적 라우터 - 맨 마지막에 배치!
+# [4단계] 완전 동적 라우터 (개별 조회/수정/삭제)
 # ==========================================================
 
 # ✅ [READ] 특정 학생 상세 조회
