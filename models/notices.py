@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date
+from sqlalchemy import Column, Integer, String, Date, Boolean
 from database.db import Base
 
 class Notice(Base):
@@ -9,3 +9,4 @@ class Notice(Base):
     content = Column(String(500), nullable=False)           # 공지 내용
     target_class_id = Column(Integer, nullable=False)       # 대상 학급 ID (classes 테이블과 연동)
     date = Column(Date, nullable=False)                     # 작성일자
+    is_important = Column(Boolean, default=False)           # 중요 여부

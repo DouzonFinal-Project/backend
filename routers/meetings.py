@@ -7,12 +7,16 @@ from schemas.meetings import Meeting as MeetingSchema, MeetingCreate
 
 router = APIRouter(prefix="/meetings", tags=["상담 기록"])
 
+# ==========================================================
+# [DB 종속성 주입] 세션 연결
+# ==========================================================
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
 
 # ==========================================================
 # [1단계] CRUD 기본 라우터 - 루트 경로 우선 처리
@@ -27,10 +31,12 @@ def create_meeting(meeting: MeetingCreate, db: Session = Depends(get_db)):
     db.refresh(db_meeting)
     return db_meeting
 
+
 # ✅ [READ] 전체 상담 기록 조회
 @router.get("/", response_model=list[MeetingSchema])
 def read_meetings(db: Session = Depends(get_db)):
     return db.query(MeetingModel).all()
+
 
 # ==========================================================
 # [2단계] 정적 라우터 - 구체적인 경로들
@@ -41,7 +47,8 @@ def read_meetings(db: Session = Depends(get_db)):
 def meetings_summary(db: Session = Depends(get_db)):
     total = db.query(func.count(MeetingModel.id)).scalar()
     latest = db.query(func.max(MeetingModel.date)).scalar()
-    return {"total_meetings": total, "latest_meeting": latest}
+    return {"총 상담 건수": total, "최근 상담일": latest}
+
 
 # ✅ [READ] 특정 교사 상담 기록 조회
 @router.get("/teacher/{teacher_id}", response_model=list[MeetingSchema])
@@ -51,6 +58,7 @@ def get_meetings_by_teacher(teacher_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="해당 교사의 상담 기록이 없습니다")
     return meetings
 
+
 # ✅ [READ] 특정 학생 상담 기록 조회
 @router.get("/student/{student_id}", response_model=list[MeetingSchema])
 def get_meetings_by_student(student_id: int, db: Session = Depends(get_db)):
@@ -58,6 +66,7 @@ def get_meetings_by_student(student_id: int, db: Session = Depends(get_db)):
     if not meetings:
         raise HTTPException(status_code=404, detail="해당 학생의 상담 기록이 없습니다")
     return meetings
+
 
 # ==========================================================
 # [3단계] 혼합 라우터 - 일부 정적, 일부 동적
@@ -74,18 +83,21 @@ def get_meetings_by_month(year: int, month: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="해당 월의 상담 기록이 없습니다")
     return meetings
 
+
 # ✅ [STATS] 교사별 상담 건수 통계
 @router.get("/stats/teacher/{teacher_id}")
 def get_teacher_meeting_stats(teacher_id: int, db: Session = Depends(get_db)):
     count = db.query(func.count(MeetingModel.id)).filter(MeetingModel.teacher_id == teacher_id).scalar()
-    return {"teacher_id": teacher_id, "total_meetings": count}
+    return {"교사 ID": teacher_id, "상담 건수": count}
+
 
 # ✅ [STATS] 학생별 상담 건수/최종 상담일
 @router.get("/stats/student/{student_id}")
 def get_student_meeting_stats(student_id: int, db: Session = Depends(get_db)):
     total = db.query(func.count(MeetingModel.id)).filter(MeetingModel.student_id == student_id).scalar()
     last = db.query(func.max(MeetingModel.date)).filter(MeetingModel.student_id == student_id).scalar()
-    return {"student_id": student_id, "total_meetings": total, "last_meeting_date": last}
+    return {"학생 ID": student_id, "상담 건수": total, "최종 상담일": last}
+
 
 # ==========================================================
 # [4단계] 완전 동적 라우터 - 맨 마지막에 배치!
@@ -99,6 +111,7 @@ def read_meeting(meeting_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="상담 정보를 찾을 수 없습니다")
     return meeting
 
+
 # ✅ [UPDATE] 상담 기록 수정
 @router.put("/{meeting_id}", response_model=MeetingSchema)
 def update_meeting(meeting_id: int, updated: MeetingCreate, db: Session = Depends(get_db)):
@@ -110,6 +123,7 @@ def update_meeting(meeting_id: int, updated: MeetingCreate, db: Session = Depend
     db.commit()
     db.refresh(meeting)
     return meeting
+
 
 # ✅ [DELETE] 상담 기록 삭제
 @router.delete("/{meeting_id}")

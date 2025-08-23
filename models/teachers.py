@@ -1,28 +1,29 @@
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from database.db import Base
+from models.classes import Class   # ✅ Class 직접 import (중요!)
 
 class Teacher(Base):
     __tablename__ = "teachers"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True)
-    phone = Column(String(20))
-    subject = Column(String(100))
-    role = Column(String(50))
-    is_homeroom = Column(Boolean, default=False)
-    homeroom_class = Column(String(50))
-    class_id = Column(Integer, ForeignKey("classes.id"))
+    id = Column(Integer, primary_key=True, index=True)      # 교사 고유 ID (PK)
+    name = Column(String(100), nullable=False)              # 교사 이름
+    email = Column(String(100), unique=True)                # 이메일
+    phone = Column(String(20))                              # 전화번호
+    subject = Column(String(100))                           # 담당 과목
+    role = Column(String(50))                               # 역할
+    is_homeroom = Column(Boolean, default=False)            # 담임 여부
+    homeroom_class = Column(String(50))                     # 담임 학급명
+    class_id = Column(Integer, ForeignKey("classes.id"))    # 소속 학급 ID (FK)
 
-    # ✅ 이 교사가 담임을 맡은 학급들 (ONE-TO-MANY 방향)
+    # ✅ 이 교사가 맡은 학급들 (1:N 관계)
     classes = relationship(
         "Class",
         back_populates="teacher",
-        foreign_keys="Class.teacher_id"
+        foreign_keys=[Class.teacher_id]   # ✅ 컬럼 직접 참조
     )
 
-    # ✅ 이 교사가 담임으로 설정된 학급 객체 (자신이 속한 학급 1개)
+    # ✅ 이 교사가 소속된 학급 (1:1 관계)
     class_ = relationship(
         "Class",
         foreign_keys=[class_id]

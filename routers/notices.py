@@ -2,10 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database.db import SessionLocal
 from models.notices import Notice as NoticeModel
-from schemas.notices import Notice as NoticeSchema
+from schemas.notices import Notice as NoticeSchema, NoticeCreate
 
 router = APIRouter(prefix="/notices", tags=["공지사항"])
 
+# ==========================================================
+# DB 세션 연결
+# ==========================================================
 def get_db():
     db = SessionLocal()
     try:
@@ -14,9 +17,13 @@ def get_db():
         db.close()
 
 
+# ==========================================================
+# [1단계] CRUD 기본 라우터
+# ==========================================================
+
 # ✅ [CREATE] 공지사항 추가
 @router.post("/", response_model=NoticeSchema)
-def create_notice(notice: NoticeSchema, db: Session = Depends(get_db)):
+def create_notice(notice: NoticeCreate, db: Session = Depends(get_db)):
     db_notice = NoticeModel(**notice.model_dump())
     db.add(db_notice)
     db.commit()
@@ -30,6 +37,10 @@ def read_notices(db: Session = Depends(get_db)):
     return db.query(NoticeModel).all()
 
 
+# ==========================================================
+# [2단계] 확장 라우터 (필터/조회)
+# ==========================================================
+
 # ✅ [FILTER] 중요 공지만 조회
 @router.get("/important", response_model=list[NoticeSchema])
 def read_important_notices(db: Session = Depends(get_db)):
@@ -39,8 +50,12 @@ def read_important_notices(db: Session = Depends(get_db)):
 # ✅ [RECENT] 최신 공지 조회
 @router.get("/recent", response_model=list[NoticeSchema])
 def read_recent_notices(limit: int = 5, db: Session = Depends(get_db)):
-    return db.query(NoticeModel).order_by(NoticeModel.created_at.desc()).limit(limit).all()
+    return db.query(NoticeModel).order_by(NoticeModel.date.desc()).limit(limit).all()
 
+
+# ==========================================================
+# [3단계] 상세/수정/삭제 라우터
+# ==========================================================
 
 # ✅ [READ] 공지사항 상세 조회
 @router.get("/{notice_id}", response_model=NoticeSchema)
@@ -53,7 +68,7 @@ def read_notice(notice_id: int, db: Session = Depends(get_db)):
 
 # ✅ [UPDATE] 공지사항 수정
 @router.put("/{notice_id}", response_model=NoticeSchema)
-def update_notice(notice_id: int, updated: NoticeSchema, db: Session = Depends(get_db)):
+def update_notice(notice_id: int, updated: NoticeCreate, db: Session = Depends(get_db)):
     notice = db.query(NoticeModel).filter(NoticeModel.id == notice_id).first()
     if notice is None:
         raise HTTPException(status_code=404, detail="공지사항을 찾을 수 없습니다")
