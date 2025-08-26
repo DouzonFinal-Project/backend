@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     # =========================
     # LLM (Gemini only)
     # =========================
-    GEMINI_MODEL: str = "gemini-2.5-Flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_API_KEY: str  # 필수
     LLM_TIMEOUT: int = 25
     LLM_TEMPERATURE: float = 0.2
