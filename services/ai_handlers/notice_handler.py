@@ -1,83 +1,188 @@
 from sqlalchemy.orm import Session
 from models.notices import Notice as NoticeModel
-from datetime import datetime, timedelta
 import google.generativeai as genai
+from sqlalchemy import func
 from config.settings import settings
+from datetime import datetime, timedelta
+import re
 
-# ✅ Gemini API 설정
+# Gemini API 설정
 genai.configure(api_key=settings.GEMINI_API_KEY)
 model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
 
 def handle_notice_query(message: str, db: Session):
-    """
-    공지사항 관련 질의 처리
-    - "중요 공지 알려줘"
-    - "최근 공지 뭐 있어?"
-    - "지난주 공지 정리해줘"
-    """
+    """공지사항 조회 및 관리 처리"""
     user_message = message.lower()
-
-    # 중요 공지
-    if "중요" in user_message:
-        return important_notices(db, message)
-
-    # 최근 공지
-    if "최근" in user_message or "최신" in user_message or "요즘" in user_message:
-        return recent_notices(db, message)
-
-    # 지난주/이번주 공지
-    if "이번주" in user_message or "지난주" in user_message:
+    
+    # 이번주 공지사항 조회
+    if "이번주" in user_message or "이번 주" in user_message:
         today = datetime.now().date()
-        start = today - timedelta(days=today.weekday() + (7 if "지난주" in user_message else 0))
-        end = start + timedelta(days=6)
-        return weekly_notices(db, start, end, message)
+        start = today - timedelta(days=today.weekday())  # 월요일
+        end = start + timedelta(days=6)                  # 일요일
+        return handle_notice_weekly(start, end, message, db)
+    
+    # 지난주 공지사항 조회
+    if "지난주" in user_message or "지난 주" in user_message:
+        today = datetime.now().date()
+        start = today - timedelta(days=today.weekday() + 7)  # 지난주 월요일
+        end = start + timedelta(days=6)                      # 지난주 일요일
+        return handle_notice_weekly(start, end, message, db)
+    
+    # 오늘 공지사항 조회
+    if "오늘" in user_message and any(keyword in user_message for keyword in ["공지", "공지사항"]):
+        today = datetime.now().date()
+        return handle_notice_daily(today, message, db)
+    
+    # 중요 공지사항 조회
+    if any(keyword in user_message for keyword in ["중요", "긴급", "필수"]):
+        return handle_important_notices(message, db)
+    
+    # 전체 공지사항 조회
+    if any(keyword in user_message for keyword in ["전체", "모든", "목록"]):
+        return handle_notice_list(message, db)
+    
+    # 기본: 최근 공지사항 조회
+    return handle_recent_notices(message, db)
 
-    # 기본: 전체 공지 반환
-    return all_notices(db, message)
 
-
-def important_notices(db: Session, message: str):
-    notices = db.query(NoticeModel).filter(NoticeModel.is_important == True).all()
-    return build_ai_response(notices, message)
-
-
-def recent_notices(db: Session, message: str, days: int = 7):
-    since = datetime.now() - timedelta(days=days)
-    notices = db.query(NoticeModel).filter(NoticeModel.created_at >= since).all()
-    return build_ai_response(notices, message)
-
-
-def weekly_notices(db: Session, start, end, message: str):
+def handle_notice_daily(date, message: str, db: Session):
+    """일일 공지사항 조회"""
+    current_date = datetime.now().strftime('%Y년 %m월 %d일')
+    
     notices = (
         db.query(NoticeModel)
-        .filter(NoticeModel.created_at.between(start, end))
+        .filter(func.date(NoticeModel.date) == date)
+        .order_by(NoticeModel.date.desc())
         .all()
     )
-    return build_ai_response(notices, message)
-
-
-def all_notices(db: Session, message: str):
-    notices = db.query(NoticeModel).all()
-    return build_ai_response(notices, message)
-
-
-def build_ai_response(notices, message: str):
+    
     if not notices:
-        return "해당 조건에 맞는 공지사항이 없습니다."
+        # 최근 공지사항도 함께 조회
+        recent_notices = (
+            db.query(NoticeModel)
+            .order_by(NoticeModel.date.desc())
+            .limit(3)
+            .all()
+        )
+        
+        if recent_notices:
+            recent_info = "\n".join([f"- {notice.title} ({notice.date})" for notice in recent_notices])
+            return f"현재 날짜({current_date})에 등록된 공지사항이 없습니다.\n\n최근 공지사항들도 확인해보세요:\n{recent_info}"
+        else:
+            return f"현재 날짜({current_date})에 등록된 공지사항이 없습니다."
+    
+    return build_notice_response(notices, message)
 
-    notice_info = [
-        f"- {n.title} ({n.created_at.strftime('%Y-%m-%d')}) : {n.content}" for n in notices
-    ]
-    notice_list = "\n".join(notice_info)
 
+def handle_important_notices(message: str, db: Session):
+    """중요 공지사항 조회 (기능 제거됨)"""
+    return "죄송합니다. 현재 중요 공지사항 구분 기능은 지원하지 않습니다. 전체 공지사항을 조회해드릴까요?"
+
+
+def handle_notice_list(message: str, db: Session):
+    """전체 공지사항 조회"""
+    notices = (
+        db.query(NoticeModel)
+        .order_by(NoticeModel.date.desc())
+        .limit(10)
+        .all()
+    )
+    
+    return build_notice_response(notices, message)
+
+
+def handle_notice_weekly(start, end, message: str, db: Session):
+    """주간 공지사항 조회"""
+    notices = (
+        db.query(NoticeModel)
+        .filter(NoticeModel.date.between(start, end))
+        .order_by(NoticeModel.date.desc())
+        .all()
+    )
+    
+    return build_notice_response_with_summary(notices, message, start, end)
+
+
+def handle_recent_notices(message: str, db: Session):
+    """최근 공지사항 조회"""
+    notices = (
+        db.query(NoticeModel)
+        .order_by(NoticeModel.date.desc())
+        .limit(5)
+        .all()
+    )
+    
+    return build_notice_response(notices, message)
+
+
+def build_notice_response(notices, message: str):
+    """AI 응답 생성 (공지사항)"""
+    current_date = datetime.now().strftime('%Y년 %m월 %d일')
+    
+    if not notices:
+        return f"현재 날짜({current_date})에 등록된 공지사항이 없습니다."
+    
+    notice_info = []
+    for notice in notices:
+        notice_info.append(f"{notice.title} - {notice.date}")
+    
+    notice_list = "\n".join([f"{i+1}. {info}" for i, info in enumerate(notice_info)])
+    
     prompt = f"""
-    다음은 공지사항 목록입니다:
-
+    현재 날짜: {current_date}
+    
+    다음은 학교 공지사항 목록입니다:
+    
     {notice_list}
-
-    사용자가 "{message}" 라고 요청했습니다.
-    위 공지사항을 바탕으로 친근하고 자연스러운 한국어로 답변을 생성해 주세요.
+    
+    사용자가 "{message}"라고 질문했습니다. 
+    현재 날짜를 기준으로 위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
     """
+    
+    response = model.generate_content(prompt)
+    return response.text
+
+
+def build_notice_response_with_summary(notices, message: str, start_date, end_date):
+    """AI 응답 생성 (공지사항 + 내용 요약)"""
+    current_date = datetime.now().strftime('%Y년 %m월 %d일')
+    period = f"{start_date.strftime('%m월 %d일')} ~ {end_date.strftime('%m월 %d일')}"
+    
+    if not notices:
+        return f"{period} 기간에 등록된 공지사항이 없습니다."
+    
+    # 날짜별로 공지사항 그룹화
+    notices_by_date = {}
+    for notice in notices:
+        date_str = notice.date.strftime('%m월 %d일')
+        if date_str not in notices_by_date:
+            notices_by_date[date_str] = []
+        notices_by_date[date_str].append(notice)
+    
+    # 요약 정보 생성
+    summary_info = []
+    for date_str, date_notices in notices_by_date.items():
+        date_summary = f"\n{date_str}:"
+        for notice in date_notices:
+            # content를 간단히 요약 (최대 50자)
+            content_summary = notice.content[:50] + "..." if len(notice.content) > 50 else notice.content
+            date_summary += f"\n- {notice.title}: {content_summary}"
+        summary_info.append(date_summary)
+    
+    summary_text = "".join(summary_info)
+    
+    prompt = f"""
+    현재 날짜: {current_date}
+    
+    다음은 {period} 기간의 공지사항 요약입니다:
+    
+    {summary_text}
+    
+    사용자가 "{message}"라고 질문했습니다. 
+    위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
+    날짜별로 정리해서 보기 쉽게 설명해주세요.
+    """
+    
     response = model.generate_content(prompt)
     return response.text
