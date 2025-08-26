@@ -61,6 +61,7 @@ app.include_router(tests.router,          prefix="/v1")
 app.include_router(front_proxy.router,    prefix="/v1")
 app.include_router(ai_chatbot.router,     prefix="/v1")   # ✅ 새 AI 통합 라우터          
 app.include_router(ai.router,             prefix="/v1")   # ✅ 새 AI 챗봇 라우터
+app.include_router(ai.router,             prefix="/api")  # ✅ API 프리픽스 추가
 app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라우터
 
 # ✅ 헬스체크 엔드포인트
