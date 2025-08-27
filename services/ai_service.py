@@ -23,7 +23,7 @@ def process_ai_query(message: str, db: Session):
         return handle_grade_query(message, db)
     
     # 이벤트/일정 조회 및 추가
-    elif any(keyword in user_message for keyword in ["일정", "이벤트", "행사", "스케줄"]):
+    elif any(keyword in user_message for keyword in ["일정", "이벤트", "행사", "스케줄", "추가", "등록", "만들어"]):
         return handle_event_query(message, db)
     
     # 공지사항 조회
@@ -36,4 +36,4 @@ def process_ai_query(message: str, db: Session):
     
     # 기본 응답
     else:
-        return "죄송합니다. 현재는 선생님/학생 명단 조회, 성적 조회, 이벤트/일정 조회, 공지사항 조회, 수업 정보 조회 기능만 지원합니다." 
+        return "죄송합니다. 현재는 선생님/학생 명단 조회, 성적 조회, 이벤트/일정 조회 및 추가, 공지사항 조회, 수업 정보 조회 기능만 지원합니다." 

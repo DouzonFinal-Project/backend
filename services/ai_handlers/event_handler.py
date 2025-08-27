@@ -15,18 +15,18 @@ def handle_event_query(message: str, db: Session):
     """이벤트/일정 조회 및 추가/삭제 처리"""
     user_message = message.lower()
     
-    # 오늘 일정 조회 요청
-    if "오늘" in user_message and any(keyword in user_message for keyword in ["일정", "스케줄", "할일"]):
-        today = datetime.now().date()
-        return handle_event_daily(today, message, db)
+    # 일정 추가 요청 (가장 우선순위)
+    if any(keyword in user_message for keyword in ["추가", "등록", "만들어", "생성"]):
+        return handle_event_add(message, db)
     
     # 일정 삭제 요청
     if any(keyword in user_message for keyword in ["삭제", "지워", "취소", "제거"]):
         return handle_event_delete(message, db)
     
-    # 일정 추가 요청
-    if any(keyword in user_message for keyword in ["추가", "등록", "만들어", "생성"]):
-        return handle_event_add(message, db)
+    # 오늘 일정 조회 요청
+    if "오늘" in user_message and any(keyword in user_message for keyword in ["일정", "스케줄", "할일"]):
+        today = datetime.now().date()
+        return handle_event_daily(today, message, db)
     
     # 주간 일정 조회 요청
     if "이번 주" in user_message or "이번주" in user_message:
@@ -188,28 +188,129 @@ def build_ai_response(events, message: str):
 
 
 def extract_event_title(message: str) -> str:
-    """메시지에서 일정 제목만 추출"""
+    """AI를 사용하여 메시지에서 일정 제목만 추출"""
+    prompt = f"""
+    다음 메시지에서 일정 제목만 추출해주세요:
+    
+    메시지: "{message}"
+    
+    예시:
+    - "오늘 오후에 학생면담 일정을 추가해줘" → "학생면담"
+    - "내일 수학시험 일정 추가" → "수학시험"
+    - "다음주 체육대회 일정 등록" → "체육대회"
+    - "오늘 오후에 이예은 상담 일정을 추가해줘" → "이예은 상담"
+    
+    일정 제목만 정확히 답변해주세요.
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        result = response.text.strip()
+        
+        # 결과가 너무 길거나 의미없는 경우 키워드 기반 추출 사용
+        if len(result) > 20 or not result:
+            return extract_event_title_by_keywords(message)
+        
+        return result
+        
+    except Exception as e:
+        print(f"AI 추출 실패, 키워드 기반 추출로 대체: {e}")
+        return extract_event_title_by_keywords(message)
+
+
+def extract_event_title_by_keywords(message: str) -> str:
+    """키워드 기반 일정 제목 추출 (AI 실패 시 대체)"""
+    # 시간 관련 키워드 제거
+    time_keywords = ['오늘', '내일', '모레', '다음주', '이번주', '오후', '오전', '아침', '저녁']
     clean_message = message
-    clean_message = re.sub(r'(내일|모레|오늘|다음\s*주|이번\s*주)', '', clean_message)
+    
+    for keyword in time_keywords:
+        clean_message = clean_message.replace(keyword, '')
+    
+    # 날짜 패턴 제거
     clean_message = re.sub(r'\d{1,2}월\s*\d{1,2}일', '', clean_message)
     clean_message = re.sub(r'\d{1,2}일', '', clean_message)
-    clean_message = re.sub(r'(일정\s*추가|등록|만들어|생성).*', '', clean_message)
-    clean_message = re.sub(r'[을를이에의]', '', clean_message)
-    clean_message = clean_message.strip()
+    
+    # 일정 관련 키워드 제거
+    schedule_keywords = ['일정', '추가', '등록', '만들어', '생성', '해줘', '요']
+    for keyword in schedule_keywords:
+        clean_message = clean_message.replace(keyword, '')
+    
+    # 조사 제거
+    clean_message = re.sub(r'[을를이에의가을로에]', '', clean_message)
+    
+    # 공백 정리
+    clean_message = re.sub(r'\s+', ' ', clean_message).strip()
+    
     return clean_message if clean_message and len(clean_message) > 1 else None
 
 
 def classify_event_type(event_title: str) -> str:
-    """이벤트 제목을 분석하여 적절한 타입을 반환"""
-    event_title_lower = event_title.lower()
+    """AI를 사용하여 일정 유형을 분류"""
+    event_types = ["일반", "시험/평가", "행사/활동", "캠페인", "예방교육", "상담/회의"]
     
-    exam_keywords = ['시험', '고사', '평가', '테스트', '중간고사', '기말고사', '수능', '모의고사']
-    if any(keyword in event_title_lower for keyword in exam_keywords):
+    prompt = f"""
+    다음 일정 제목을 보고 6가지 유형 중 하나로 분류해주세요:
+    
+    일정 제목: {event_title}
+    
+    분류 유형:
+    1. 일반 - 일반적인 학교 일정
+    2. 시험/평가 - 시험, 평가, 성적 관련
+    3. 행사/활동 - 체육대회, 수학여행, 축제 등
+    4. 캠페인 - 안전, 환경, 건강 관련 캠페인
+    5. 예방교육 - 안전교육, 약물예방교육 등
+    6. 상담/회의 - 면담, 회의, 상담 관련
+    
+    분류 결과만 정확히 답변해주세요 (예: "상담/회의")
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        result = response.text.strip()
+        
+        # 응답이 유효한 유형인지 확인
+        if result in event_types:
+            return result
+        else:
+            # 키워드 기반 분류 (AI 응답이 실패할 경우)
+            return classify_event_type_by_keywords(event_title)
+            
+    except Exception as e:
+        print(f"AI 분류 실패, 키워드 기반 분류로 대체: {e}")
+        return classify_event_type_by_keywords(event_title)
+
+
+def classify_event_type_by_keywords(event_title: str) -> str:
+    """키워드 기반 일정 유형 분류 (AI 실패 시 대체)"""
+    title_lower = event_title.lower()
+    
+    # 시험/평가
+    if any(keyword in title_lower for keyword in ['시험', '평가', '성적', '고사', '테스트']):
         return "시험/평가"
     
-    event_keywords = ['대회', '축제', '행사', '체육', '운동회', '체육대회', '축구', '농구', '야구', '배구', '육상', '수영', '체조', '태권도', '검도', '무술', '댄스', '합창', '연극', '뮤지컬', '전시회', '박람회', '페스티벌', '캠프', '수학여행', '견학', '체험학습']
-    if any(keyword in event_title_lower for keyword in event_keywords):
+    # 행사/활동
+    elif any(keyword in title_lower for keyword in ['체육대회', '수학여행', '축제', '운동회', '여행', '대회']):
         return "행사/활동"
+    
+    # 캠페인
+    elif any(keyword in title_lower for keyword in ['캠페인', '안전', '환경', '건강']):
+        return "캠페인"
+    
+    # 예방교육
+    elif any(keyword in title_lower for keyword in ['교육', '예방', '안전교육', '약물']):
+        return "예방교육"
+    
+    # 상담/회의
+    elif any(keyword in title_lower for keyword in ['면담', '상담', '회의', '미팅', '학부모']):
+        return "상담/회의"
+    
+    # 기본값
+    else:
+        return "일반"
+
+
+
 
 
 def handle_event_delete(message: str, db: Session):
