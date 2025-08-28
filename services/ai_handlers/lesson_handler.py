@@ -121,7 +121,7 @@ async def build_next_lesson_response(lesson, message: str, is_tomorrow: bool = F
     """
     
     if lesson.ppt_link:
-        lesson_info += f"PPT: {lesson.ppt_link}"
+        lesson_info += f"\nPPT 자료 링크: {lesson.ppt_link}"
     
     time_info = "내일" if is_tomorrow else "오늘"
     
@@ -154,7 +154,7 @@ async def build_today_lessons_response(lessons, message: str, date):
         내용: {lesson.lesson_content}
         """
         if lesson.ppt_link:
-            lesson_info += f"PPT: {lesson.ppt_link}"
+            lesson_info += f"\nPPT 자료 링크: {lesson.ppt_link}"
         lessons_info.append(lesson_info)
     
     lessons_text = "\n---\n".join(lessons_info)
@@ -189,7 +189,7 @@ async def build_subject_lesson_response(lesson, message: str):
     """
     
     if lesson.ppt_link:
-        lesson_info += f"PPT: {lesson.ppt_link}"
+        lesson_info += f"\nPPT 자료 링크: {lesson.ppt_link}"
     
     prompt = f"""
     현재 날짜: {current_date}
