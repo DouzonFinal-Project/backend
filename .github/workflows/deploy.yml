@@ -2,7 +2,7 @@ name: Backend CI/CD
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
     paths:
       - "backend/**"
 
@@ -12,11 +12,10 @@ jobs:
     permissions:
       id-token: write
       contents: read
+
     env:
       AWS_REGION: ap-northeast-2
       ECR_REPO: 373317459179.dkr.ecr.ap-northeast-2.amazonaws.com/app/backend
-      BACK_IMAGE: ${{ env.ECR_REPO }}:latest
-      BACK_IMAGE_SHA: ${{ env.ECR_REPO }}:${{ github.sha }}
       INSTANCE_TAG_ROLE: backend
 
     steps:
@@ -31,12 +30,17 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Docker build
+      - name: Set derived envs
+        run: |
+          echo "BACK_IMAGE=${ECR_REPO}:latest" >> $GITHUB_ENV
+          echo "BACK_IMAGE_SHA=${ECR_REPO}:${GITHUB_SHA}" >> $GITHUB_ENV
+
+      - name: Build & Push
         working-directory: ./backend
         run: |
-          docker build -t $BACK_IMAGE -t $BACK_IMAGE_SHA .
-          docker push $BACK_IMAGE
-          docker push $BACK_IMAGE_SHA
+          docker build -t "$BACK_IMAGE" -t "$BACK_IMAGE_SHA" .
+          docker push "$BACK_IMAGE"
+          docker push "$BACK_IMAGE_SHA"
 
       - name: Deploy via SSM
         run: |
@@ -46,11 +50,11 @@ jobs:
             --targets "Key=tag:Role,Values=${INSTANCE_TAG_ROLE}" \
             --parameters commands='[
               "set -eux",
-              "aws --region '${AWS_REGION}' ecr get-login-password | docker login --username AWS --password-stdin '${ECR_REPO%/*}'",
+              "aws --region '"${AWS_REGION}"' ecr get-login-password | docker login --username AWS --password-stdin '"${ECR_REPO%/*}"'",
               "cd /opt/backend",
-              "echo BACK_IMAGE='${BACK_IMAGE}' > .env",
+              "echo BACK_IMAGE='"${BACK_IMAGE}"' > .env",
               "docker compose pull",
               "docker compose up -d",
               "docker image prune -f"
             ]' \
-            --region $AWS_REGION
+            --region "$AWS_REGION"
