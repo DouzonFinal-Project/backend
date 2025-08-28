@@ -7,7 +7,7 @@ from config.settings import settings
 genai.configure(api_key=settings.GEMINI_API_KEY)
 model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
-def handle_student_query(message: str, db: Session):
+async def handle_student_query(message: str, db: Session):
     """학생 명단 조회 처리"""
     # 학생 데이터 조회
     students = db.query(StudentModel).all()
@@ -33,6 +33,6 @@ def handle_student_query(message: str, db: Session):
     """
     
     # Gemini API 호출
-    response = model.generate_content(prompt)
+    response = await model.generate_content_async(prompt)
     
     return response.text 

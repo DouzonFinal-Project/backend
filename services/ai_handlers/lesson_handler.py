@@ -11,30 +11,30 @@ genai.configure(api_key=settings.GEMINI_API_KEY)
 model = genai.GenerativeModel(settings.GEMINI_MODEL)
 
 
-def handle_lesson_query(message: str, db: Session):
+async def handle_lesson_query(message: str, db: Session):
     """수업 정보 조회 및 관리 처리"""
     user_message = message.lower()
     
     # 다음 수업 조회
     if any(keyword in user_message for keyword in ["다음 수업", "다음시간", "다음 교시", "다음시간표"]):
-        return handle_next_lesson(message, db)
+        return await handle_next_lesson(message, db)
     
     # 오늘 수업 조회
     if "오늘" in user_message and any(keyword in user_message for keyword in ["수업", "시간표", "교시"]):
         today = datetime.now().date()
-        return handle_today_lessons(today, message, db)
+        return await handle_today_lessons(today, message, db)
     
     # 특정 과목 수업 조회
     subject_keywords = ["수학", "국어", "영어", "과학", "사회", "체육", "음악", "미술"]
     for subject in subject_keywords:
         if subject in user_message:
-            return handle_subject_lesson(subject, message, db)
+            return await handle_subject_lesson(subject, message, db)
     
     # 기본: 다음 수업 조회
-    return handle_next_lesson(message, db)
+    return await handle_next_lesson(message, db)
 
 
-def handle_next_lesson(message: str, db: Session):
+async def handle_next_lesson(message: str, db: Session):
     """다음 수업 조회"""
     current_time = datetime.now()
     current_date = current_time.date()
@@ -66,12 +66,12 @@ def handle_next_lesson(message: str, db: Session):
         if not next_lesson:
             return "다음 수업 일정이 등록되어 있지 않습니다."
         
-        return build_next_lesson_response(next_lesson, message, is_tomorrow=True)
+        return await build_next_lesson_response(next_lesson, message, is_tomorrow=True)
     
-    return build_next_lesson_response(next_lesson, message, is_tomorrow=False)
+    return await build_next_lesson_response(next_lesson, message, is_tomorrow=False)
 
 
-def handle_today_lessons(date, message: str, db: Session):
+async def handle_today_lessons(date, message: str, db: Session):
     """오늘 수업 조회"""
     lessons = (
         db.query(LessonModel)
@@ -83,10 +83,10 @@ def handle_today_lessons(date, message: str, db: Session):
     if not lessons:
         return f"오늘({date.strftime('%m월 %d일')}) 등록된 수업이 없습니다."
     
-    return build_today_lessons_response(lessons, message, date)
+    return await build_today_lessons_response(lessons, message, date)
 
 
-def handle_subject_lesson(subject: str, message: str, db: Session):
+async def handle_subject_lesson(subject: str, message: str, db: Session):
     """특정 과목 수업 조회"""
     current_date = datetime.now().date()
     
@@ -105,10 +105,10 @@ def handle_subject_lesson(subject: str, message: str, db: Session):
     if not lesson:
         return f"{subject} 수업 일정이 등록되어 있지 않습니다."
     
-    return build_subject_lesson_response(lesson, message)
+    return await build_subject_lesson_response(lesson, message)
 
 
-def build_next_lesson_response(lesson, message: str, is_tomorrow: bool = False):
+async def build_next_lesson_response(lesson, message: str, is_tomorrow: bool = False):
     """다음 수업 응답 생성"""
     current_date = datetime.now().strftime('%Y년 %m월 %d일')
     
@@ -133,15 +133,15 @@ def build_next_lesson_response(lesson, message: str, is_tomorrow: bool = False):
     {lesson_info}
     
     사용자가 "{message}"라고 질문했습니다. 
-    위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
+    위 정보를 바탕으로 정중하고 존댓말을 사용하여 답변해주세요.
     수업 준비에 도움이 되도록 실용적인 정보를 포함해주세요.
     """
     
-    response = model.generate_content(prompt)
+    response = await model.generate_content_async(prompt)
     return response.text
 
 
-def build_today_lessons_response(lessons, message: str, date):
+async def build_today_lessons_response(lessons, message: str, date):
     """오늘 수업 목록 응답 생성"""
     current_date = datetime.now().strftime('%Y년 %m월 %d일')
     
@@ -167,15 +167,15 @@ def build_today_lessons_response(lessons, message: str, date):
     {lessons_text}
     
     사용자가 "{message}"라고 질문했습니다. 
-    위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
+    위 정보를 바탕으로 정중하고 존댓말을 사용하여 답변해주세요.
     오늘 수업 일정을 정리해서 보기 쉽게 설명해주세요.
     """
     
-    response = model.generate_content(prompt)
+    response = await model.generate_content_async(prompt)
     return response.text
 
 
-def build_subject_lesson_response(lesson, message: str):
+async def build_subject_lesson_response(lesson, message: str):
     """특정 과목 수업 응답 생성"""
     current_date = datetime.now().strftime('%Y년 %m월 %d일')
     
@@ -199,8 +199,8 @@ def build_subject_lesson_response(lesson, message: str):
     {lesson_info}
     
     사용자가 "{message}"라고 질문했습니다. 
-    위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
+    위 정보를 바탕으로 정중하고 존댓말을 사용하여 답변해주세요.
     """
     
-    response = model.generate_content(prompt)
+    response = await model.generate_content_async(prompt)
     return response.text 
