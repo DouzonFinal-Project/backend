@@ -20,20 +20,21 @@ def get_db():
 
 # ✅ [GENERATE] 시험지 자동 생성 (AI 연동)
 @router.post("/generate")
-def generate_exam(payload: dict, db: Session = Depends(get_db)):
+async def generate_exam(payload: dict, db: Session = Depends(get_db)):
     """
     시험지 자동 생성 API
     - 입력: {"subject": "국어", "unit": "4단원", "level": "중급", "question_count": 10, "types": ["어휘", "내용이해"]}
     - 처리: AI 핸들러 호출
     - 출력: 생성된 문제 리스트 반환
     """
-    result = exam_handler.generate_exam(payload, db)
+    result = await exam_handler.generate_exam(payload, db)
     return {
         "success": True,
         "data": result,
         "message": "시험지가 성공적으로 생성되었습니다"
     }
 
+  
 ################## 주석 처리 ##################
 # ----------------------------------------------------
 # 📌 시험지 DB 저장/조회/삭제 관련 기능 (현재 미사용)
