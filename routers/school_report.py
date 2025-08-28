@@ -132,6 +132,53 @@ def get_class_school_reports(class_id: int, db: Session = Depends(get_db)):
 
 
 # ==========================================================
+# [2.5단계] 통합 라우터 (출결 + 성적 + 생활기록부)
+# ==========================================================
+
+@router.get("/full/{student_id}")
+def get_full_school_report(student_id: int, db: Session = Depends(get_db)):
+    """
+    특정 학생의 출결 + 성적 + 생활기록부 코멘트 통합 조회
+    """
+    from models.attendance import Attendance as AttendanceModel
+    from models.grades import Grade as GradeModel
+
+    # 출결 조회
+    attendance = db.query(AttendanceModel).filter(AttendanceModel.student_id == student_id).all()
+    attendance_data = [{"date": a.date, "status": a.status} for a in attendance] if attendance else []
+
+    # 성적 조회
+    grades = db.query(GradeModel).filter(GradeModel.student_id == student_id).all()
+    grade_data = [
+        {"subject": g.subject, "score": g.score, "grade_letter": g.grade_letter}
+        for g in grades
+    ] if grades else []
+
+    # 생활기록부 조회
+    reports = db.query(SchoolReportModel).filter(SchoolReportModel.student_id == student_id).all()
+    report_data = [
+        {
+            "year": r.year,
+            "semester": r.semester,
+            "behavior_summary": r.behavior_summary,
+            "peer_relation": r.peer_relation,
+            "career_aspiration": r.career_aspiration,
+            "teacher_feedback": r.teacher_feedback
+        }
+        for r in reports
+    ] if reports else []
+
+    return {
+        "success": True,
+        "student_id": student_id,
+        "attendance": attendance_data,
+        "grades": grade_data,
+        "reports": report_data,
+        "message": f"학생 ID {student_id} 생활기록부 통합 조회 성공"
+    }
+
+
+# ==========================================================
 # [3단계] Export/Action 라우터
 # ==========================================================
 
