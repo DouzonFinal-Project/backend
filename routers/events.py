@@ -36,7 +36,8 @@ def create_event(event: EventSchema, db: Session = Depends(get_db)):
         "success": True,
         "data": {
             "id": db_event.id,
-            "title": db_event.title,
+            "event_name": db_event.event_name,
+            "event_type": db_event.event_type,
             "date": str(db_event.date),
             "description": db_event.description,
             "message": "Event created successfully"
@@ -52,7 +53,7 @@ def read_events(db: Session = Depends(get_db)):
     return {
         "success": True,
         "data": [
-            {"id": r.id, "title": r.title, "date": str(r.date), "description": r.description}
+            {"id": r.id, "event_name": r.event_name, "event_type": r.event_type, "date": str(r.date), "description": r.description}
             for r in records
         ]
     }
@@ -75,7 +76,7 @@ def get_monthly_events(year: int, month: int, db: Session = Depends(get_db)):
     return {
         "success": True,
         "data": [
-            {"id": e.id, "title": e.title, "date": str(e.date), "description": e.description}
+            {"id": e.id, "event_name": e.event_name, "event_type": e.event_type, "date": str(e.date), "description": e.description}
             for e in events
         ]
     }
@@ -93,7 +94,7 @@ def get_weekly_events(start_date: str, end_date: str, db: Session = Depends(get_
     return {
         "success": True,
         "data": [
-            {"id": e.id, "title": e.title, "date": str(e.date), "description": e.description}
+            {"id": e.id, "event_name": e.event_name, "event_type": e.event_type, "date": str(e.date), "description": e.description}
             for e in events
         ]
     }
