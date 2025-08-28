@@ -24,7 +24,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::373317459179:role/GitHubActionsDeployRole
+          role-to-assume: arn:aws:iam::373317459179:role/github-actions-ecr-pusher
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
@@ -46,7 +46,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::373317459179:role/GitHubActionsDeployRole
+          role-to-assume: arn:aws:iam::373317459179:role/github-actions-ecr-pusher
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy via SSM (by tag Role=backend)
