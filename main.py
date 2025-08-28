@@ -69,6 +69,10 @@ app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라�
 def health_check():
     return {"status": "ok", "message": "API is running"}
 
+@app.on_event("startup")
+def _connect_milvus():
+  connections.connect("default", host="milvus", port="19530")
+
 # ✅ 루트 엔드포인트
 @app.get("/")
 def root():
