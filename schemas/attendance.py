@@ -11,4 +11,4 @@ class Attendance(BaseModel):
     special_note: Optional[str] = None       # 특이사항
 
     class Config:
-        orm_mode = True
+        from_attributes = True

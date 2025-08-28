@@ -9,4 +9,4 @@ class TestScore(BaseModel):
     subject_name: Optional[str] = None       # 과목 이름 (중복 저장용)
 
     class Config:
-        orm_mode = True
+        from_attributes = True
