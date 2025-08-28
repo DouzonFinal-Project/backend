@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학급 요약 보고서</title>
+    <style>
+        @page {
+            margin: 2cm;
+            size: A4;
+        }
+        
+        body {
+            font-family: '맑은 고딕', sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #007bff;
+            margin: 0;
+            font-size: 28px;
+        }
+        
+        .summary-stats {
+            display: flex;
+            justify-content: space-around;
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .student-list {
+            columns: 2;
+            column-gap: 30px;
+        }
+        
+        .student-item {
+            break-inside: avoid;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ class_id }}반 학급 요약 보고서</h1>
+        <p>생성일: {{ generated_date }}</p>
+    </div>
+    
+    <div class="summary-stats">
+        <div class="stat-item">
+            <div class="stat-number">{{ students|length }}</div>
+            <div>총 학생 수</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">{{ students|selectattr("gender", "equalto", "남")|list|length }}</div>
+            <div>남학생</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">{{ students|selectattr("gender", "equalto", "여")|list|length }}</div>
+            <div>여학생</div>
+        </div>
+    </div>
+    
+    <h2>학생 명단</h2>
+    <div class="student-list">
+        {% for student in students %}
+            <div class="student-item">
+                <strong>{{ student.student_name }}</strong> ({{ student.gender }})
+                <br><small>ID: {{ student.id }}</small>
+            </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

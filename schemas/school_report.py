@@ -12,4 +12,4 @@ class SchoolReport(BaseModel):
     teacher_feedback: Optional[str] = None        # 종합 의견
 
     class Config:
-        orm_mode = True
+        from_attributes = True

@@ -1,0 +1,11 @@
+services:
+  milvus:
+    image: milvusdb/milvus:v2.5.16     # ← v 붙이고, CPU용
+    container_name: milvus-standalone
+    command: ["milvus", "run", "standalone"]
+    ports:
+      - "19530:19530"
+    volumes:
+      - milvus_data:/var/lib/milvus
+volumes:
+  milvus_data:

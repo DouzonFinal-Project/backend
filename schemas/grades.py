@@ -10,4 +10,4 @@ class Grade(BaseModel):
     grade_letter: Optional[str] = None       # 성적 등급 (예: A, B, C)
 
     class Config:
-        orm_mode = True
+        from_attributes = True

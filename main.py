@@ -1,35 +1,31 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# 🔽 2안 기준: 각 기능별 라우터 import
+# ✅ 미들웨어 임포트
+from middlewares.timing import TimingMiddleware
+from middlewares.error_handler import add_error_handlers
+
+# ✅ 라우터 임포트
 from routers import (
-    students,
-    teachers,
-    classes,
-    subjects,
-    tests,
-    test_scores,
-    attendance,
-    events,
-    reports,
-    school_report,
-    grades,
-    meetings,
-    notices,
-    auth
+    attendance, auth, classes, events, grades, exams,
+    llm,  # ← Gemini API 호출 라우터
+    ai_chatbot,  # ← AI 챗봇 라우터(상담)
+    ai,   # ← AI 챗봇 라우터(성적 및 일정관리)
+    meetings, notices, reports, school_report,
+    students, subjects, teachers, test_scores, tests,
+    front_proxy, pdf_reports
 )
 
-# 🔽 DB 관련 import
-from database.db import Base, engine
-from models.students import Student  # ✅ 2안 기준 모델 1개만 임포트 (create_all용)
+app = FastAPI(
+    title="Teacher Assistant API",
+    description="초등학교 교사 행정지원 AI 챗봇 백엔드 API",
+    version="1.0.0"
+)
 
-# ✅ FastAPI 인스턴스 생성
-app = FastAPI()
-
-# ✅ CORS 설정
+# ✅ CORS 설정 (프론트엔드 연동 대비)
 origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://localhost:3000",  # 로컬 개발용 React/Next.js
+    # 추후 배포 도메인 추가 가능
 ]
 
 app.add_middleware(
@@ -40,26 +36,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ 테이블 자동 생성
-Base.metadata.create_all(bind=engine)
+# ✅ 요청 지연 측정 미들웨어 (응답 헤더 X-Latency-Ms 추가)
+app.add_middleware(TimingMiddleware)
 
-# ✅ 각 라우터 등록 (prefix는 "/api")
-app.include_router(students.router, prefix="/api")
-app.include_router(teachers.router, prefix="/api")
-app.include_router(classes.router, prefix="/api")
-app.include_router(subjects.router, prefix="/api")
-app.include_router(tests.router, prefix="/api")
-app.include_router(test_scores.router, prefix="/api")
-app.include_router(attendance.router, prefix="/api")
-app.include_router(events.router, prefix="/api")
-app.include_router(reports.router, prefix="/api")
-app.include_router(school_report.router, prefix="/api")
-app.include_router(grades.router, prefix="/api")
-app.include_router(meetings.router, prefix="/api")
-app.include_router(notices.router, prefix="/api")
-app.include_router(auth.router, prefix="/api")
+# ✅ 전역 에러 핸들러 등록 (일관된 JSON 에러 포맷)
+add_error_handlers(app)
 
-# ✅ 기본 테스트 엔드포인트
+# ✅ /v1 프리픽스 라우터 등록
+app.include_router(attendance.router,     prefix="/v1")
+app.include_router(auth.router,           prefix="/v1")
+app.include_router(classes.router,        prefix="/v1")
+app.include_router(events.router,         prefix="/v1")
+app.include_router(grades.router,         prefix="/v1")
+app.include_router(llm.router,            prefix="/v1")   # ✅ 새 Gemini 라우터
+app.include_router(meetings.router,       prefix="/v1")
+app.include_router(notices.router,        prefix="/v1")
+app.include_router(reports.router,        prefix="/v1")
+app.include_router(exams.router,          prefix="/v1")
+app.include_router(school_report.router,  prefix="/v1")
+app.include_router(students.router,       prefix="/v1")
+app.include_router(subjects.router,       prefix="/v1")
+app.include_router(teachers.router,       prefix="/v1")
+app.include_router(test_scores.router,    prefix="/v1")
+app.include_router(tests.router,          prefix="/v1")
+app.include_router(front_proxy.router,    prefix="/v1")
+app.include_router(ai_chatbot.router,     prefix="/v1")   # ✅ AI 챗봇 라우터(상담)
+app.include_router(ai.router,             prefix="/v1")   # ✅ AI 챗봇 라우터(성적 및 일정관리)   
+app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라우터
+
+# ✅ 헬스체크 엔드포인트
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "message": "API is running"}
+
+@app.on_event("startup")
+def _connect_milvus():
+  connections.connect("default", host="milvus", port="19530")
+
+# ✅ 루트 엔드포인트
 @app.get("/")
-def read_root():
-    return {"message": "Welcome to Douzone Final Project"}
+def root():
+    return {"message": "Teacher Assistant API - 초등학교 교사 행정지원 AI"}
