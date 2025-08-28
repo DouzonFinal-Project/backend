@@ -15,7 +15,7 @@ def migrate_grades():
                 id=int(row["id"]),                          # 성적 고유 ID
                 student_id=int(row["student_id"]),          # 학생 ID
                 subject_id=int(row["subject_id"]),          # 과목 ID
-                term=1 if "1" in row["term"] else 2,                      # 학기
+                semester=int(row["term"]),                  # ✅ term → semester
                 average_score=float(row["average_score"]),  # 평균 점수
                 grade_letter=row["grade_letter"]            # 성적 등급 (예: A, B)
             )
@@ -23,7 +23,7 @@ def migrate_grades():
 
     db.commit()
     db.close()
-    print("✅ 성적 CSV → DB 마이그레이션 완료")
+    print("✅ 성적 CSV → DB 마이그레이션 완료 (semester 반영됨)")
 
 if __name__ == "__main__":
     migrate_grades()
