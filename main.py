@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pymilvus import connections
 
 # ✅ 미들웨어 임포트
 from middlewares.timing import TimingMiddleware
@@ -9,8 +10,8 @@ from middlewares.error_handler import add_error_handlers
 from routers import (
     attendance, auth, classes, events, grades, exams,
     llm,  # ← Gemini API 호출 라우터
-    ai_chatbot,  # ← AI 챗봇 라우터(상담)
-    ai,   # ← AI 챗봇 라우터(성적 및 일정관리)
+    ai_chatbot,  # ← AI 챗봇 라우터
+    ai,  # ← 새 AI 챗봇 라우터
     meetings, notices, reports, school_report,
     students, subjects, teachers, test_scores, tests,
     front_proxy, pdf_reports
@@ -60,8 +61,8 @@ app.include_router(teachers.router,       prefix="/v1")
 app.include_router(test_scores.router,    prefix="/v1")
 app.include_router(tests.router,          prefix="/v1")
 app.include_router(front_proxy.router,    prefix="/v1")
-app.include_router(ai_chatbot.router,     prefix="/v1")   # ✅ AI 챗봇 라우터(상담)
-app.include_router(ai.router,             prefix="/v1")   # ✅ AI 챗봇 라우터(성적 및 일정관리)   
+app.include_router(ai_chatbot.router,     prefix="/v1")   # ✅ 새 AI 통합 라우터          
+app.include_router(ai.router,             prefix="/v1")   # ✅ 새 AI 챗봇 라우터
 app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라우터
 
 # ✅ 헬스체크 엔드포인트
@@ -71,7 +72,10 @@ def health_check():
 
 @app.on_event("startup")
 def _connect_milvus():
-  connections.connect("default", host="milvus", port="19530")
+    try:
+        connections.connect("default", host="localhost", port="19530")
+    except:
+        pass  # Milvus 연결 실패해도 서버 시작
 
 # ✅ 루트 엔드포인트
 @app.get("/")
