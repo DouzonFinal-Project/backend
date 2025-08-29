@@ -128,7 +128,12 @@ def update_event(event_id: int, updated: EventSchema, db: Session = Depends(get_
     if event is None:
         return {"success": False, "error": {"code": 404, "message": "Event not found"}}
 
-    for key, value in updated.model_dump().items():
+    # ID를 제외하고 업데이트할 필드만 처리
+    update_data = updated.model_dump(exclude_unset=True)
+    if 'id' in update_data:
+        del update_data['id']  # ID는 변경하지 않음
+    
+    for key, value in update_data.items():
         setattr(event, key, value)
 
     db.commit()
@@ -137,7 +142,8 @@ def update_event(event_id: int, updated: EventSchema, db: Session = Depends(get_
         "success": True,
         "data": {
             "id": event.id,
-            "title": event.title,
+            "event_name": event.event_name,
+            "event_type": event.event_type,
             "date": str(event.date),
             "description": event.description,
             "message": "Event updated successfully"
