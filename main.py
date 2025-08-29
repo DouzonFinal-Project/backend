@@ -9,13 +9,10 @@ from middlewares.error_handler import add_error_handlers
 from routers import (
     attendance, auth, classes, events, grades, exams,
     llm,  # ← Gemini API 호출 라우터
-<<<<<<< HEAD
+
     ai_chatbot,  # ← AI 챗봇 라우터
     ai,  # ← 새 AI 챗봇 라우터
-=======
-    ai_chatbot,  # ← AI 챗봇 라우터(상담)
-    ai,   # ← AI 챗봇 라우터(성적 및 일정관리)
->>>>>>> dev
+
     meetings, notices, reports, school_report,
     students, subjects, teachers, test_scores, tests,
     front_proxy, pdf_reports

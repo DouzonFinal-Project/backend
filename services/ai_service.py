@@ -4,10 +4,8 @@ from services.ai_handlers.student_handler import handle_student_query
 from services.ai_handlers.grade_handler import handle_grade_query
 from services.ai_handlers.event_handler import handle_event_query
 from services.ai_handlers.notice_handler import handle_notice_query
-<<<<<<< HEAD
 from services.ai_handlers.lesson_handler import handle_lesson_query
-=======
->>>>>>> dev
+
 
 async def process_ai_query(message: str, db: Session):
     """AI 쿼리 처리 메인 함수"""
