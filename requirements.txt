@@ -13,3 +13,4 @@ httpx==0.28.1
 weasyprint==61.2        # HTML to PDF 변환
 jinja2==3.1.2          # 템플릿 엔진  
 pillow==10.0.0         # 이미지 처리
+python-dotenv==1.0.1

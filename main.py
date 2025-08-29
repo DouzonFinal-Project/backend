@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pymilvus import connections
 
 # ✅ 미들웨어 임포트
 from middlewares.timing import TimingMiddleware
@@ -25,7 +26,7 @@ app = FastAPI(
 # ✅ CORS 설정 (프론트엔드 연동 대비)
 origins = [
     "http://localhost:3000",  # 로컬 개발용 React/Next.js
-    # 추후 배포 도메인 추가 가능
+    "http://3.34.241.88",# 추후 배포 도메인 추가 가능
 ]
 
 app.add_middleware(
