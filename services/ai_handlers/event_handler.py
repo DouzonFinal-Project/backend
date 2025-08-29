@@ -107,16 +107,16 @@ async def handle_event_add(message: str, db: Session):
     try:
         db.add(new_event)
         db.commit()
-        return f"✅ '{event_title}' 일정이 {event_date}에 성공적으로 추가되었습니다!"
+        return f"'{event_title}' 일정이 {event_date}에 성공적으로 추가되었습니다!"
     except Exception as e:
         db.rollback()
-        return f"❌ 일정 추가 중 오류가 발생했습니다: {str(e)}"
+        return f"일정 추가 중 오류가 발생했습니다: {str(e)}"
 
 
 async def handle_event_list(message: str, db: Session):
     """전체 이벤트 목록 조회"""
     events = db.query(EventModel).all()
-    return build_ai_response(events, message)
+    return await build_ai_response(events, message)
 
 
 async def handle_event_weekly(start, end, message, db: Session):
@@ -126,7 +126,7 @@ async def handle_event_weekly(start, end, message, db: Session):
         .filter(EventModel.date.between(start, end))
         .all()
     )
-    return build_ai_response(events, message)
+    return await build_ai_response(events, message)
 
 
 async def handle_event_daily(date, message: str, db: Session):
@@ -155,7 +155,7 @@ async def handle_event_daily(date, message: str, db: Session):
         else:
             return f"현재 날짜({current_date})에 등록된 일정이 없습니다."
     
-    return build_ai_response(events, message)
+    return await build_ai_response(events, message)
 
 
 async def handle_event_monthly(year: int, month: int, message: str, db: Session):
@@ -166,7 +166,7 @@ async def handle_event_monthly(year: int, month: int, message: str, db: Session)
         .filter(func.month(EventModel.date) == month)
         .all()
     )
-    return build_ai_response(events, message)
+    return await build_ai_response(events, message)
 
 
 async def build_ai_response(events, message: str):
@@ -424,20 +424,20 @@ async def handle_event_delete(message: str, db: Session):
             deleted_count += 1
         except Exception as e:
             db.rollback()
-            return f"❌ 일정 삭제 중 오류가 발생했습니다: {str(e)}"
+            return f"일정 삭제 중 오류가 발생했습니다: {str(e)}"
     
     try:
         db.commit()
         
         if deleted_count == 1:
-            return f"✅ '{deleted_events[0]}' 일정이 성공적으로 삭제되었습니다!"
+            return f"'{deleted_events[0]}' 일정이 성공적으로 삭제되었습니다!"
         else:
             deleted_list = "\n".join([f"- {event}" for event in deleted_events])
-            return f"✅ {deleted_count}개의 일정이 삭제되었습니다:\n{deleted_list}"
+            return f"{deleted_count}개의 일정이 삭제되었습니다:\n{deleted_list}"
             
     except Exception as e:
         db.rollback()
-        return f"❌ 일정 삭제 중 오류가 발생했습니다: {str(e)}"
+        return f"일정 삭제 중 오류가 발생했습니다: {str(e)}"
 
 
 async def extract_event_title_for_delete(message: str) -> str:
