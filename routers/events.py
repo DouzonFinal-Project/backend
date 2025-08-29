@@ -135,6 +135,11 @@ def update_event(event_id: int, updated: EventSchema, db: Session = Depends(get_
     if event is None:
         return {"success": False, "error": {"code": 404, "message": "학사일정을 찾을 수 없습니다"}}
 
+    # 부분 업데이트 허용 + ID 변경 방지
+    update_data = updated.model_dump(exclude_unset=True)
+    if "id" in update_data:
+        del update_data["id"]
+        
     for key, value in updated.model_dump().items():
         setattr(event, key, value)
 
