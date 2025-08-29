@@ -16,9 +16,8 @@ jobs:
 
     env:
       AWS_REGION: ap-northeast-2
-      ACCOUNT_ID: 373317459179
-      ECR_REPO: web/app             # ← 백엔드용 ECR 리포지토리명
-      BACK_IMAGE: ${{ env.ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}
+      ACCOUNT_ID: '373317459179'     # ← 그대로 값만 둠
+      ECR_REPO: 'app/backend'            # ← 백엔드 ECR 리포지토리명
 
     steps:
       - uses: actions/checkout@v4
@@ -32,10 +31,15 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      # 🔧 여기서 BACK_IMAGE를 계산해 환경변수로 내보냄
+      - name: Compute BACK_IMAGE
+        run: |
+          echo "BACK_IMAGE=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}" >> $GITHUB_ENV
+
       - name: Build & Push backend image
         run: |
-          docker build -t $BACK_IMAGE:latest .
-          docker push $BACK_IMAGE:latest
+          docker build -t "$BACK_IMAGE:latest" .
+          docker push "$BACK_IMAGE:latest"
 
       - name: Deploy to App EC2 via SSM
         run: |
@@ -49,4 +53,4 @@ jobs:
               "BACK_IMAGE='${BACK_IMAGE}:latest' docker compose up -d"
             ]' \
             --comment "Deploy backend" \
-            --region $AWS_REGION
+            --region "$AWS_REGION"
