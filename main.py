@@ -7,10 +7,15 @@ from middlewares.error_handler import add_error_handlers
 
 # ✅ 라우터 임포트
 from routers import (
-    attendance, auth, classes, events, grades,
+    attendance, auth, classes, events, grades, exams,
     llm,  # ← Gemini API 호출 라우터
+<<<<<<< HEAD
     ai_chatbot,  # ← AI 챗봇 라우터
     ai,  # ← 새 AI 챗봇 라우터
+=======
+    ai_chatbot,  # ← AI 챗봇 라우터(상담)
+    ai,   # ← AI 챗봇 라우터(성적 및 일정관리)
+>>>>>>> dev
     meetings, notices, reports, school_report,
     students, subjects, teachers, test_scores, tests,
     front_proxy, pdf_reports
@@ -52,6 +57,7 @@ app.include_router(llm.router,            prefix="/v1")   # ✅ 새 Gemini 라�
 app.include_router(meetings.router,       prefix="/v1")
 app.include_router(notices.router,        prefix="/v1")
 app.include_router(reports.router,        prefix="/v1")
+app.include_router(exams.router,          prefix="/v1")
 app.include_router(school_report.router,  prefix="/v1")
 app.include_router(students.router,       prefix="/v1")
 app.include_router(subjects.router,       prefix="/v1")
@@ -61,12 +67,17 @@ app.include_router(tests.router,          prefix="/v1")
 app.include_router(front_proxy.router,    prefix="/v1")
 app.include_router(ai_chatbot.router,     prefix="/v1")   # ✅ 새 AI 통합 라우터          
 app.include_router(ai.router,             prefix="/v1")   # ✅ 새 AI 챗봇 라우터
+
 app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라우터
 
 # ✅ 헬스체크 엔드포인트
 @app.get("/health")
 def health_check():
     return {"status": "ok", "message": "API is running"}
+
+@app.on_event("startup")
+def _connect_milvus():
+  connections.connect("default", host="milvus", port="19530")
 
 # ✅ 루트 엔드포인트
 @app.get("/")

@@ -20,10 +20,12 @@ class ChatResponse(BaseModel):
     response: str
 
 @router.post("/chat", response_model=ChatResponse)
+
 async def chat_with_ai(request: ChatRequest, db: Session = Depends(get_db)):
     try:
         # AI 서비스 호출
         response = await process_ai_query(request.message, db)
+
         return ChatResponse(response=response)
             
     except Exception as e:
@@ -31,5 +33,7 @@ async def chat_with_ai(request: ChatRequest, db: Session = Depends(get_db)):
 
 # 추가 AI 기능들을 위한 엔드포인트
 @router.get("/health")
+
 async def ai_health_check():
+
     return {"status": "AI 서비스 정상 작동 중"} 

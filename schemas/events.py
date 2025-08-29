@@ -10,4 +10,4 @@ class Event(BaseModel):
     description: Optional[str] = None        # 상세 설명
 
     class Config:
-        orm_mode = True
+        from_attributes = True

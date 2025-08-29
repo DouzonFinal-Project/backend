@@ -1,0 +1,66 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+    paths: [ "**" ]
+
+env:
+  AWS_REGION: ap-northeast-2
+  AWS_ACCOUNT_ID: 373317459179
+  ECR_REPO: app/backend
+  IMAGE_TAG: latest
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::373317459179:role/github-actions-ecr-pusher
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & Push (Docker)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ github.sha }}
+
+  deploy:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::373317459179:role/github-actions-ecr-pusher
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy via SSM (by tag Role=backend)
+        run: |
+          set -eux
+          BACK_IMAGE="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:latest"
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Role,Values=backend" \
+            --parameters 'commands=[
+              "set -eux",
+              "cd /opt/backend",
+              "BACK_IMAGE='"$BACK_IMAGE"' docker compose pull",
+              "BACK_IMAGE='"$BACK_IMAGE"' docker compose up -d"
+            ]' \
+            --comment "Deploy backend" \
+            --region ${{ env.AWS_REGION }}

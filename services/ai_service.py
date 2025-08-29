@@ -4,7 +4,10 @@ from services.ai_handlers.student_handler import handle_student_query
 from services.ai_handlers.grade_handler import handle_grade_query
 from services.ai_handlers.event_handler import handle_event_query
 from services.ai_handlers.notice_handler import handle_notice_query
+<<<<<<< HEAD
 from services.ai_handlers.lesson_handler import handle_lesson_query
+=======
+>>>>>>> dev
 
 async def process_ai_query(message: str, db: Session):
     """AI 쿼리 처리 메인 함수"""
@@ -33,6 +36,11 @@ async def process_ai_query(message: str, db: Session):
     # 수업 정보 조회
     elif any(keyword in user_message for keyword in ["수업", "시간표", "교시", "다음시간"]):
         return await handle_lesson_query(message, db)
+
+    
+    # 공지사항 조회
+    elif any(keyword in user_message for keyword in ["공지", "공지사항", "알림"]):
+        return handle_notice_query(message, db)
     
     # 기본 응답
     else:
