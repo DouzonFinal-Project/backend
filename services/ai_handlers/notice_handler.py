@@ -137,7 +137,15 @@ async def build_notice_response(notices, message: str):
     {notice_list}
     
     사용자가 "{message}"라고 질문했습니다. 
-    현재 날짜를 기준으로 위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
+    
+    다음 지침에 따라 답변해주세요:
+    1. 별표(*) 기호를 사용하지 마세요
+    2. 간결하고 전문적인 톤으로 답변하세요
+    3. 존댓말을 사용하되 자연스럽게 하세요
+    4. 핵심 정보에 집중하고 체계적으로 정리해주세요
+    5. 불필요한 반복을 피하고 명확하게 설명해주세요
+    6. 이모지나 과도한 친근함 표현을 자제해주세요
+    7. 미래 일정은 '예정되어 있습니다' 또는 '있습니다'로 통일해서 표현해주세요
     """
     
     response = await model.generate_content_async(prompt)
@@ -180,9 +188,17 @@ async def build_notice_response_with_summary(notices, message: str, start_date, 
     {summary_text}
     
     사용자가 "{message}"라고 질문했습니다. 
-    위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
-    날짜별로 정리해서 보기 쉽게 설명해주세요.
+    
+    다음 지침에 따라 답변해주세요:
+    1. 별표(*) 기호를 사용하지 마세요
+    2. 간결하고 전문적인 톤으로 답변하세요
+    3. 존댓말을 사용하되 자연스럽게 하세요
+    4. 날짜별로 체계적으로 정리해주세요
+    5. 불필요한 반복을 피하고 명확하게 설명해주세요
+    6. 이모지나 과도한 친근함 표현을 자제해주세요
+    7. 미래 일정은 '예정되어 있습니다' 또는 '있습니다'로 통일해서 표현해주세요
     """
     
     response = await model.generate_content_async(prompt)
     return response.text
+

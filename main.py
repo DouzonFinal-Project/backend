@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pymilvus import connections  # ✅ Milvus 연결용
 
 # ✅ 미들웨어 임포트
 from middlewares.timing import TimingMiddleware
@@ -57,7 +58,7 @@ app.include_router(school_report.router,  prefix="/v1")
 app.include_router(students.router,       prefix="/v1")
 app.include_router(subjects.router,       prefix="/v1")
 app.include_router(teachers.router,       prefix="/v1")
-app.include_router(config.router,         prefix="/v1")
+app.include_router(config.router,         prefix="/v1")   # ✅ config 라우터 유지
 app.include_router(test_scores.router,    prefix="/v1")
 app.include_router(tests.router,          prefix="/v1")
 app.include_router(front_proxy.router,    prefix="/v1")
@@ -69,6 +70,15 @@ app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라�
 @app.get("/health")
 def health_check():
     return {"status": "ok", "message": "API is running"}
+
+# ✅ Milvus 연결 (서버 시작 시 실행)
+@app.on_event("startup")
+def _connect_milvus():
+    try:
+        connections.connect("default", host="localhost", port="19530")
+        print("✅ Milvus 연결 성공")
+    except Exception as e:
+        print(f"⚠️ Milvus 연결 실패: {e}")
 
 # ✅ 루트 엔드포인트
 @app.get("/")
