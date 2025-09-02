@@ -133,8 +133,14 @@ async def build_next_lesson_response(lesson, message: str, is_tomorrow: bool = F
     {lesson_info}
     
     사용자가 "{message}"라고 질문했습니다. 
-    위 정보를 바탕으로 정중하고 존댓말을 사용하여 답변해주세요.
-    수업 준비에 도움이 되도록 실용적인 정보를 포함해주세요.
+    
+    다음 지침에 따라 답변해주세요:
+    1. 별표(*) 기호를 사용하지 마세요
+    2. 간결하고 전문적인 톤으로 답변하세요
+    3. 존댓말을 사용하되 자연스럽게 하세요
+    4. 수업 준비에 도움이 되는 실용적인 정보를 포함하세요
+    5. 불필요한 반복을 피하고 핵심 정보에 집중하세요
+    6. PPT 자료가 있다면 "수업에 사용될 PPT 자료는 아래에서 확인하실 수 있습니다:"라는 문구로 안내하세요
     """
     
     response = await model.generate_content_async(prompt)
@@ -167,8 +173,14 @@ async def build_today_lessons_response(lessons, message: str, date):
     {lessons_text}
     
     사용자가 "{message}"라고 질문했습니다. 
-    위 정보를 바탕으로 정중하고 존댓말을 사용하여 답변해주세요.
-    오늘 수업 일정을 정리해서 보기 쉽게 설명해주세요.
+    
+    다음 지침에 따라 답변해주세요:
+    1. 별표(*) 기호를 사용하지 마세요
+    2. 간결하고 전문적인 톤으로 답변하세요
+    3. 존댓말을 사용하되 자연스럽게 하세요
+    4. 오늘 수업 일정을 체계적으로 정리해주세요
+    5. 불필요한 반복을 피하고 핵심 정보에 집중하세요
+    6. PPT 자료가 있다면 "수업에 사용될 PPT 자료는 아래 링크에서 확인하실 수 있습니다:"라는 문구로 안내하세요
     """
     
     response = await model.generate_content_async(prompt)
@@ -199,7 +211,13 @@ async def build_subject_lesson_response(lesson, message: str):
     {lesson_info}
     
     사용자가 "{message}"라고 질문했습니다. 
-    위 정보를 바탕으로 정중하고 존댓말을 사용하여 답변해주세요.
+    
+    다음 지침에 따라 답변해주세요:
+    1. 별표(*) 기호를 사용하지 마세요
+    2. 간결하고 전문적인 톤으로 답변하세요
+    3. 존댓말을 사용하되 자연스럽게 하세요
+    4. 불필요한 반복을 피하고 핵심 정보에 집중하세요
+    5. PPT 자료가 있다면 "수업에 사용될 PPT 자료는 아래 링크에서 확인하실 수 있습니다:"라는 문구로 안내하세요
     """
     
     response = await model.generate_content_async(prompt)
