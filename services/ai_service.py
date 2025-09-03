@@ -34,11 +34,6 @@ async def process_ai_query(message: str, db: Session):
     elif any(keyword in user_message for keyword in ["수업", "시간표", "교시", "다음시간"]):
         return await handle_lesson_query(message, db)
 
-    
-    # 공지사항 조회
-    elif any(keyword in user_message for keyword in ["공지", "공지사항", "알림"]):
-        return handle_notice_query(message, db)
-    
     # 기본 응답
     else:
         return "죄송합니다. 현재는 선생님/학생 명단 조회, 성적 조회, 이벤트/일정 조회 및 추가, 공지사항 조회, 수업 정보 조회 기능만 지원합니다." 
