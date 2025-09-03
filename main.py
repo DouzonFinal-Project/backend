@@ -14,7 +14,7 @@ from routers import (
     ai,  # ← 새 AI 챗봇 라우터
     meetings, notices, reports, school_report,
     students, subjects, teachers, test_scores, tests,
-    front_proxy, pdf_reports
+    front_proxy, pdf_reports, problem_generation
 )
 
 app = FastAPI(
@@ -64,6 +64,7 @@ app.include_router(front_proxy.router,    prefix="/v1")
 app.include_router(ai_chatbot.router,     prefix="/v1")   # ✅ 새 AI 통합 라우터          
 app.include_router(ai.router,             prefix="/v1")   # ✅ 새 AI 챗봇 라우터
 app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라우터
+app.include_router(problem_generation.router, prefix="/v1")   # ✅ 문제 생성 라우터
 
 # ✅ 헬스체크 엔드포인트
 @app.get("/health")
