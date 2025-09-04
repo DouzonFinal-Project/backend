@@ -1,12 +1,18 @@
 import asyncio
 import re
+import httpx
+import json
 from typing import List, Dict, Any
-from services.llm.llm_gemini import generate_text
+from config.settings import settings
 from database.db import SessionLocal
 
 class ProblemGeneratorHandler:
     def __init__(self):
-        pass
+        self.api_key = settings.GEMINI_API_KEY
+        self.model = settings.GEMINI_MODEL
+        self.timeout = settings.LLM_TIMEOUT
+        self.max_tokens = 8192  # 문제지 생성을 위해 토큰 수 증가
+        self.temperature = settings.LLM_TEMPERATURE
     
     async def generate_problem_set(self, settings: Dict[str, Any]) -> str:
         """
@@ -29,9 +35,9 @@ class ProblemGeneratorHandler:
             # 프롬프트 구성
             prompt = self._build_prompt(settings)
             
-            # Gemini API 호출 - 20문제까지 지원하기 위해 토큰 제한 증가
+            # Gemini API 직접 호출
             system_prompt = "전문적인 교육 문제 출제자입니다."
-            response = await generate_text(system_prompt, prompt, max_tokens=8192)
+            response = await self._call_gemini_api(system_prompt, prompt)
             
             # 디버깅: 응답 구조 출력
             print(f"=== Gemini API 응답 구조 ===")
@@ -73,12 +79,46 @@ class ProblemGeneratorHandler:
                     import traceback
                     traceback.print_exc()
                 
-                # 응답 구조를 다시 확인
+                # 응답 구조를 다시 확인하고 대체 방법 시도
                 print(f"전체 응답을 문자열로 변환 시도...")
                 if isinstance(response, dict):
+                    # Gemini API 응답의 다른 가능한 구조들 확인
+                    if "candidates" in response:
+                        candidates = response["candidates"]
+                        if candidates and len(candidates) > 0:
+                            candidate = candidates[0]
+                            if "content" in candidate:
+                                content = candidate["content"]
+                                if "parts" in content:
+                                    parts = content["parts"]
+                                    if parts and len(parts) > 0:
+                                        part = parts[0]
+                                        if "text" in part:
+                                            text = part["text"]
+                                            if text and text.strip():
+                                                cleaned_text = self._clean_latex_notation(text)
+                                                return cleaned_text
+                    
+                    # 직접 텍스트 검색
                     response_str = str(response)
                     if "text" in response_str.lower() or "content" in response_str.lower():
                         print("응답에 text나 content 관련 키가 있습니다.")
+                        # JSON 문자열에서 텍스트 추출 시도
+                        try:
+                            import json
+                            response_json = json.dumps(response, ensure_ascii=False)
+                            if "text" in response_json:
+                                # 간단한 텍스트 추출
+                                start_idx = response_json.find('"text": "') + 8
+                                if start_idx > 8:
+                                    end_idx = response_json.find('"', start_idx)
+                                    if end_idx > start_idx:
+                                        extracted_text = response_json[start_idx:end_idx]
+                                        if extracted_text and len(extracted_text) > 10:  # 의미있는 텍스트인지 확인
+                                            cleaned_text = self._clean_latex_notation(extracted_text)
+                                            return cleaned_text
+                        except Exception as json_error:
+                            print(f"JSON 파싱 시도 중 오류: {json_error}")
                     else:
                         print("응답에 text나 content 관련 키가 없습니다.")
                 
@@ -93,6 +133,265 @@ class ProblemGeneratorHandler:
         except Exception as e:
             print(f"문제지 생성 중 오류 발생: {e}")
             return f"문제지 생성 중 오류가 발생했습니다: {str(e)}"
+    
+    async def generate_problem_set_streaming(self, settings: Dict[str, Any]):
+        """
+        문제출제설정에 맞는 문제지를 스트리밍으로 생성합니다.
+        
+        Args:
+            settings: 문제 출제 설정 정보
+        
+        Yields:
+            str: 생성된 문제지 내용 (스트리밍)
+        """
+        try:
+            # 프롬프트 구성
+            prompt = self._build_prompt(settings)
+            
+            # Gemini API 스트리밍 호출
+            system_prompt = "전문적인 교육 문제 출제자입니다."
+            
+            # 전체 응답을 버퍼에 모음
+            full_response = ""
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:streamGenerateContent"
+                
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": f"{system_prompt}\n\n{prompt}"}]
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": self.temperature,
+                        "maxOutputTokens": self.max_tokens,
+                        "topP": 0.8,
+                        "topK": 40
+                    }
+                }
+                
+                async with client.stream("POST", url, headers=headers, json=payload, params={"key": self.api_key}) as response:
+                    if response.status_code == 200:
+                        async for line in response.aiter_lines():
+                            if line.strip():
+                                full_response += line
+                        
+                        # 완전한 JSON 파싱
+                        try:
+                            response_data = json.loads(full_response)
+                            print(f"=== 파싱된 전체 응답 ===")
+                            print(f"Response Data: {response_data}")
+                            print(f"==========================")
+                            
+                            # 각 청크에서 텍스트 추출하여 yield
+                            if isinstance(response_data, list):
+                                for chunk in response_data:
+                                    if "candidates" in chunk and chunk["candidates"]:
+                                        candidate = chunk["candidates"][0]
+                                        if "content" in candidate and "parts" in candidate["content"]:
+                                            parts = candidate["content"]["parts"]
+                                            if parts and "text" in parts[0]:
+                                                text = parts[0]["text"]
+                                                if text and text.strip():
+                                                    print(f"=== 추출된 텍스트 청크 ===")
+                                                    print(f"Text: {text}")
+                                                    print(f"==========================")
+                                                    # LaTeX 수식을 초등학생이 이해할 수 있는 표기로 변환
+                                                    cleaned_text = self._clean_latex_notation(text)
+                                                    yield cleaned_text
+                                                    
+                        except json.JSONDecodeError as e:
+                            print(f"전체 응답 JSON 파싱 오류: {e}")
+                            print(f"Raw Response: {full_response}")
+                            yield f"응답 파싱 오류: {str(e)}"
+                        except Exception as e:
+                            print(f"전체 응답 처리 오류: {e}")
+                            yield f"응답 처리 오류: {str(e)}"
+                    else:
+                        error_text = await response.text()
+                        yield f"API 오류 (HTTP {response.status_code}): {error_text}"
+                        
+        except Exception as e:
+            print(f"스트리밍 문제지 생성 중 오류 발생: {e}")
+            yield f"문제지 생성 중 오류가 발생했습니다: {str(e)}"
+
+    async def _call_gemini_api(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+        """
+        Gemini API를 직접 호출합니다.
+        """
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
+            
+            headers = {
+                "Content-Type": "application/json",
+            }
+            
+            payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"text": f"{system_prompt}\n\n{user_prompt}"}
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": self.temperature,
+                    "maxOutputTokens": self.max_tokens,
+                    "topP": 0.8,
+                    "topK": 40
+                }
+            }
+            
+            print(f"=== Gemini API 요청 정보 ===")
+            print(f"URL: {url}")
+            print(f"Model: {self.model}")
+            print(f"Timeout: {self.timeout}")
+            print(f"Max Tokens: {self.max_tokens}")
+            print(f"Temperature: {self.temperature}")
+            print(f"==========================")
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    params={"key": self.api_key}
+                )
+                
+                print(f"=== Gemini API 응답 상태 ===")
+                print(f"Status Code: {response.status_code}")
+                print(f"Response Headers: {dict(response.headers)}")
+                print(f"==========================")
+                
+                if response.status_code == 200:
+                    response_data = response.json()
+                    print(f"=== Gemini API 응답 데이터 ===")
+                    print(f"Response Keys: {list(response_data.keys()) if isinstance(response_data, dict) else 'Not a dict'}")
+                    print(f"Response Type: {type(response_data)}")
+                    print(f"==========================")
+                    return response_data
+                elif response.status_code == 503:
+                    # 서비스 일시적 사용 불가 - 재시도 로직
+                    print("Gemini API 503 에러 발생, 재시도 중...")
+                    await asyncio.sleep(2)  # 2초 대기 후 재시도
+                    
+                    retry_response = await client.post(
+                        url,
+                        headers=headers,
+                        json=payload,
+                        params={"key": self.api_key}
+                    )
+                    
+                    if retry_response.status_code == 200:
+                        response_data = retry_response.json()
+                        print(f"=== 재시도 성공 - Gemini API 응답 데이터 ===")
+                        print(f"Response Keys: {list(response_data.keys()) if isinstance(response_data, dict) else 'Not a dict'}")
+                        print(f"Response Type: {type(response_data)}")
+                        print(f"==========================")
+                        return response_data
+                    else:
+                        return {"error": f"재시도 후에도 실패: HTTP {retry_response.status_code}"}
+                else:
+                    return {"error": f"HTTP {response.status_code}: {response.text}"}
+                    
+        except httpx.TimeoutException:
+            return {"error": "API 요청 시간 초과"}
+        except httpx.RequestError as e:
+            return {"error": f"API 요청 실패: {str(e)}"}
+        except Exception as e:
+            return {"error": f"예상치 못한 오류: {str(e)}"}
+
+    async def _call_gemini_streaming_api(self, system_prompt: str, user_prompt: str):
+        """
+        Gemini API를 스트리밍 방식으로 호출합니다.
+        """
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:streamGenerateContent"
+            
+            headers = {
+                "Content-Type": "application/json",
+            }
+            
+            payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"text": f"{system_prompt}\n\n{user_prompt}"}
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": self.temperature,
+                    "maxOutputTokens": self.max_tokens,
+                    "topP": 0.8,
+                    "topK": 40
+                }
+            }
+            
+            print(f"=== Gemini API 스트리밍 요청 정보 ===")
+            print(f"URL: {url}")
+            print(f"Model: {self.model}")
+            print(f"Timeout: {self.timeout}")
+            print(f"Max Tokens: {self.max_tokens}")
+            print(f"Temperature: {self.temperature}")
+            print(f"==========================")
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream("POST", url, headers=headers, json=payload, params={"key": self.api_key}) as response:
+                    print(f"=== Gemini API 스트리밍 응답 상태 ===")
+                    print(f"Status Code: {response.status_code}")
+                    print(f"==========================")
+                    
+                    if response.status_code == 200:
+                        # 전체 응답을 버퍼에 모음
+                        full_response = ""
+                        async for line in response.aiter_lines():
+                            if line.strip():
+                                full_response += line
+                                print(f"=== 누적된 응답 ===")
+                                print(f"Full Response: {full_response}")
+                                print(f"==========================")
+                        
+                        # 완전한 JSON 파싱
+                        try:
+                            response_data = json.loads(full_response)
+                            print(f"=== 파싱된 전체 응답 ===")
+                            print(f"Response Data: {response_data}")
+                            print(f"==========================")
+                            
+                            if "candidates" in response_data and response_data["candidates"]:
+                                candidate = response_data["candidates"][0]
+                                if "content" in candidate and "parts" in candidate["content"]:
+                                    parts = candidate["content"]["parts"]
+                                    if parts and "text" in parts[0]:
+                                        text = parts[0]["text"]
+                                        if text and text.strip():
+                                            print(f"=== 추출된 텍스트 ===")
+                                            print(f"Text: {text}")
+                                            print(f"==========================")
+                                            yield text
+                                            
+                        except json.JSONDecodeError as e:
+                            print(f"전체 응답 JSON 파싱 오류: {e}")
+                            print(f"Raw Response: {full_response}")
+                            yield f"응답 파싱 오류: {str(e)}"
+                        except Exception as e:
+                            print(f"전체 응답 처리 오류: {e}")
+                            yield f"응답 처리 오류: {str(e)}"
+                    else:
+                        error_text = await response.text()
+                        yield f"API 오류 (HTTP {response.status_code}): {error_text}"
+                        
+        except httpx.TimeoutException:
+            yield "API 요청 시간 초과"
+        except httpx.RequestError as e:
+            yield f"API 요청 실패: {str(e)}"
+        except Exception as e:
+            yield f"예상치 못한 오류: {str(e)}"
     
     def _build_prompt(self, settings: Dict[str, Any]) -> str:
         """
