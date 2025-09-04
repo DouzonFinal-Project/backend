@@ -9,6 +9,8 @@ router = APIRouter(prefix="/events", tags=["학사일정"])
 
 # ==========================================================
 # [공통] DB 세션 관리
+# - 모든 요청에서 DB 연결을 열고 닫는 역할
+# - connection leak 방지를 위해 try/finally 사용
 # ==========================================================
 def get_db():
     db = SessionLocal()
@@ -41,6 +43,8 @@ def create_event(event: EventSchema, db: Session = Depends(get_db)):
     }
 
 # ✅ [READ] 전체 학사일정 조회
+# - 등록된 모든 학사일정 데이터를 조회
+# - 예: 연간 학사 일정표 출력
 @router.get("/")
 def read_events(db: Session = Depends(get_db)):
     records = db.query(EventModel).all()
@@ -63,6 +67,8 @@ def read_events(db: Session = Depends(get_db)):
 # ==========================================================
 
 # ✅ [MONTHLY] 특정 월 일정 조회
+# - 지정된 연도와 월의 학사일정을 반환
+# - 학급별/학교별 월간 캘린더 조회에 활용
 @router.get("/monthly")
 def get_monthly_events(year: int, month: int, db: Session = Depends(get_db)):
     events = (
@@ -86,6 +92,8 @@ def get_monthly_events(year: int, month: int, db: Session = Depends(get_db)):
     }
 
 # ✅ [WEEKLY] 특정 기간(주간) 일정 조회
+# - 시작일~종료일 범위 내의 학사일정 반환
+# - 주간 계획표, 주간 회의 자료 등에 활용
 @router.get("/weekly")
 def get_weekly_events(start_date: str, end_date: str, db: Session = Depends(get_db)):
     events = (
@@ -111,7 +119,7 @@ def get_weekly_events(start_date: str, end_date: str, db: Session = Depends(get_
 # [3단계] 동적 라우터
 # ==========================================================
 
-# ✅ [READ] 단일 학사일정 조회
+# ✅ [READ] 단일 학사일정 상세조회
 @router.get("/{event_id}")
 def read_event(event_id: int, db: Session = Depends(get_db)):
     event = db.query(EventModel).filter(EventModel.id == event_id).first()
