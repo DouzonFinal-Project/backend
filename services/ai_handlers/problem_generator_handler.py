@@ -1,12 +1,18 @@
 import asyncio
 import re
+import httpx
+import json
 from typing import List, Dict, Any
-from services.llm.llm_gemini import generate_text
+from config.settings import settings
 from database.db import SessionLocal
 
 class ProblemGeneratorHandler:
     def __init__(self):
-        pass
+        self.api_key = settings.GEMINI_API_KEY
+        self.model = settings.GEMINI_MODEL
+        self.timeout = settings.LLM_TIMEOUT
+        self.max_tokens = 8192  # 문제지 생성을 위해 토큰 수 증가
+        self.temperature = settings.LLM_TEMPERATURE
     
     async def generate_problem_set(self, settings: Dict[str, Any]) -> str:
         """
@@ -29,9 +35,9 @@ class ProblemGeneratorHandler:
             # 프롬프트 구성
             prompt = self._build_prompt(settings)
             
-            # Gemini API 호출 - 20문제까지 지원하기 위해 토큰 제한 증가
+            # Gemini API 직접 호출
             system_prompt = "전문적인 교육 문제 출제자입니다."
-            response = await generate_text(system_prompt, prompt, max_tokens=8192)
+            response = await self._call_gemini_api(system_prompt, prompt)
             
             # 디버깅: 응답 구조 출력
             print(f"=== Gemini API 응답 구조 ===")
@@ -73,12 +79,46 @@ class ProblemGeneratorHandler:
                     import traceback
                     traceback.print_exc()
                 
-                # 응답 구조를 다시 확인
+                # 응답 구조를 다시 확인하고 대체 방법 시도
                 print(f"전체 응답을 문자열로 변환 시도...")
                 if isinstance(response, dict):
+                    # Gemini API 응답의 다른 가능한 구조들 확인
+                    if "candidates" in response:
+                        candidates = response["candidates"]
+                        if candidates and len(candidates) > 0:
+                            candidate = candidates[0]
+                            if "content" in candidate:
+                                content = candidate["content"]
+                                if "parts" in content:
+                                    parts = content["parts"]
+                                    if parts and len(parts) > 0:
+                                        part = parts[0]
+                                        if "text" in part:
+                                            text = part["text"]
+                                            if text and text.strip():
+                                                cleaned_text = self._clean_latex_notation(text)
+                                                return cleaned_text
+                    
+                    # 직접 텍스트 검색
                     response_str = str(response)
                     if "text" in response_str.lower() or "content" in response_str.lower():
                         print("응답에 text나 content 관련 키가 있습니다.")
+                        # JSON 문자열에서 텍스트 추출 시도
+                        try:
+                            import json
+                            response_json = json.dumps(response, ensure_ascii=False)
+                            if "text" in response_json:
+                                # 간단한 텍스트 추출
+                                start_idx = response_json.find('"text": "') + 8
+                                if start_idx > 8:
+                                    end_idx = response_json.find('"', start_idx)
+                                    if end_idx > start_idx:
+                                        extracted_text = response_json[start_idx:end_idx]
+                                        if extracted_text and len(extracted_text) > 10:  # 의미있는 텍스트인지 확인
+                                            cleaned_text = self._clean_latex_notation(extracted_text)
+                                            return cleaned_text
+                        except Exception as json_error:
+                            print(f"JSON 파싱 시도 중 오류: {json_error}")
                     else:
                         print("응답에 text나 content 관련 키가 없습니다.")
                 
@@ -93,6 +133,232 @@ class ProblemGeneratorHandler:
         except Exception as e:
             print(f"문제지 생성 중 오류 발생: {e}")
             return f"문제지 생성 중 오류가 발생했습니다: {str(e)}"
+    
+    async def generate_problem_set_streaming(self, settings: Dict[str, Any]):
+        """
+        문제출제설정에 맞는 문제지를 진정한 실시간 스트리밍으로 생성합니다.
+        
+        Args:
+            settings: 문제 출제 설정 정보
+        
+        Yields:
+            str: 생성된 문제지 내용 (실시간 스트리밍)
+        """
+        try:
+            # 프롬프트 구성
+            prompt = self._build_prompt(settings)
+            system_prompt = "전문적인 교육 문제 출제자입니다."
+            
+            # 스트리밍 시작 (최소한의 로깅)
+            print(f"스트리밍 시작 - Model: {self.model}")
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:streamGenerateContent"
+                
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": f"{system_prompt}\n\n{prompt}"}]
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": self.temperature,
+                        "maxOutputTokens": self.max_tokens,
+                        "topP": 0.8,
+                        "topK": 40
+                    }
+                }
+                
+                async with client.stream("POST", url, headers=headers, json=payload, params={"key": self.api_key}) as response:
+                    print(f"응답 상태: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        # Cursor처럼 단어별 스트리밍 - 디버깅 버전
+                        async for line in response.aiter_lines():
+                            if line.strip():
+                                # 디버깅: 원본 라인 확인
+                                print(f"🔍 원본 라인: {repr(line)}")
+                                
+                                # JSON 구조를 무시하고 텍스트만 추출
+                                text_chunks = self._extract_text_from_line(line)
+                                print(f"🔍 추출된 텍스트 청크: {text_chunks}")
+                                
+                                for text_chunk in text_chunks:
+                                    if text_chunk and text_chunk.strip():
+                                        # LaTeX 수식을 초등학생이 이해할 수 있는 표기로 변환
+                                        cleaned_text = self._clean_latex_notation(text_chunk)
+                                        print(f"🔍 정리된 텍스트: {repr(cleaned_text)}")
+                                        
+                                        # 단어별로 분할하여 스트리밍
+                                        words = self._split_into_words(cleaned_text)
+                                        print(f"🔍 분할된 단어들: {[repr(word) for word in words]}")
+                                        
+                                        for word in words:
+                                            if word.strip() or word in ['\n', ' ', '\t']:
+                                                # Cursor처럼 단어별 즉시 전송
+                                                yield word
+                                                
+                                                # 타이핑 효과를 위한 짧은 지연 (0.05초)
+                                                await asyncio.sleep(0.05)
+                    else:
+                        error_text = await response.text()
+                        print(f"API 오류: HTTP {response.status_code}")
+                        yield f"API 오류 (HTTP {response.status_code}): {error_text}"
+                        
+        except httpx.TimeoutException:
+            print("스트리밍 요청 시간 초과")
+            yield "API 요청 시간 초과"
+        except httpx.RequestError as e:
+            print(f"스트리밍 요청 실패: {e}")
+            yield f"API 요청 실패: {str(e)}"
+        except Exception as e:
+            print(f"스트리밍 문제지 생성 중 예상치 못한 오류: {e}")
+            yield f"문제지 생성 중 오류가 발생했습니다: {str(e)}"
+    
+    def _extract_text_from_line(self, line: str) -> List[str]:
+        """
+        라인에서 텍스트를 추출합니다. JSON 파싱 없이 정규식으로 텍스트만 추출.
+        
+        Args:
+            line: 수신된 라인
+        
+        Returns:
+            List[str]: 추출된 텍스트 청크들
+        """
+        import re
+        
+        text_chunks = []
+        
+        try:
+            # 통합된 텍스트 패턴 (더 효율적)
+            text_pattern = r'"text":\s*"([^"]*)"'
+            matches = re.findall(text_pattern, line)
+            
+            for match in matches:
+                if match.strip():
+                    # 이스케이프된 문자들 처리
+                    text = match.replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
+                    if text.strip():
+                        text_chunks.append(text)
+            
+            return text_chunks
+            
+        except Exception as e:
+            return []
+    
+    def _split_into_words(self, text: str) -> List[str]:
+        """
+        텍스트를 단어별로 분할합니다. 줄바꿈과 공백을 보존하여 Cursor처럼 타이핑 효과를 위한 단어 단위 분할.
+        
+        Args:
+            text: 분할할 텍스트
+        
+        Returns:
+            List[str]: 단어별로 분할된 리스트 (줄바꿈과 공백 보존)
+        """
+        import re
+        
+        # 줄바꿈과 공백을 보존하는 정규식
+        pattern = r'(\S+|\s+|\n)'
+        matches = re.findall(pattern, text)
+        
+        # 빈 문자열 제거하되 줄바꿈과 공백은 보존
+        result = []
+        for match in matches:
+            if match.strip() or match in ['\n', ' ', '\t']:
+                result.append(match)
+        
+        return result
+
+    async def _call_gemini_api(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+        """
+        Gemini API를 직접 호출합니다.
+        """
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
+            
+            headers = {
+                "Content-Type": "application/json",
+            }
+            
+            payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"text": f"{system_prompt}\n\n{user_prompt}"}
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": self.temperature,
+                    "maxOutputTokens": self.max_tokens,
+                    "topP": 0.8,
+                    "topK": 40
+                }
+            }
+            
+            print(f"=== Gemini API 요청 정보 ===")
+            print(f"URL: {url}")
+            print(f"Model: {self.model}")
+            print(f"Timeout: {self.timeout}")
+            print(f"Max Tokens: {self.max_tokens}")
+            print(f"Temperature: {self.temperature}")
+            print(f"==========================")
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    params={"key": self.api_key}
+                )
+                
+                print(f"=== Gemini API 응답 상태 ===")
+                print(f"Status Code: {response.status_code}")
+                print(f"Response Headers: {dict(response.headers)}")
+                print(f"==========================")
+                
+                if response.status_code == 200:
+                    response_data = response.json()
+                    print(f"=== Gemini API 응답 데이터 ===")
+                    print(f"Response Keys: {list(response_data.keys()) if isinstance(response_data, dict) else 'Not a dict'}")
+                    print(f"Response Type: {type(response_data)}")
+                    print(f"==========================")
+                    return response_data
+                elif response.status_code == 503:
+                    # 서비스 일시적 사용 불가 - 재시도 로직
+                    print("Gemini API 503 에러 발생, 재시도 중...")
+                    await asyncio.sleep(2)  # 2초 대기 후 재시도
+                    
+                    retry_response = await client.post(
+                        url,
+                        headers=headers,
+                        json=payload,
+                        params={"key": self.api_key}
+                    )
+                    
+                    if retry_response.status_code == 200:
+                        response_data = retry_response.json()
+                        print(f"=== 재시도 성공 - Gemini API 응답 데이터 ===")
+                        print(f"Response Keys: {list(response_data.keys()) if isinstance(response_data, dict) else 'Not a dict'}")
+                        print(f"Response Type: {type(response_data)}")
+                        print(f"==========================")
+                        return response_data
+                    else:
+                        return {"error": f"재시도 후에도 실패: HTTP {retry_response.status_code}"}
+                else:
+                    return {"error": f"HTTP {response.status_code}: {response.text}"}
+                    
+        except httpx.TimeoutException:
+            return {"error": "API 요청 시간 초과"}
+        except httpx.RequestError as e:
+            return {"error": f"API 요청 실패: {str(e)}"}
+        except Exception as e:
+            return {"error": f"예상치 못한 오류: {str(e)}"}
+
     
     def _build_prompt(self, settings: Dict[str, Any]) -> str:
         """
@@ -146,79 +412,64 @@ class ProblemGeneratorHandler:
         achievement_prompt = self._get_achievement_level_prompt(subject, difficulty, units)
         
         prompt = f"""
-{achievement_prompt}
+# 문제지 생성 요청
 
-{subject} 과목 {difficulty} 난이도 문제지를 생성해주세요.
-
+## 기본 설정
+- **과목**: {subject}
+- **난이도**: {difficulty}
+- **구성**: 객관식 {multiple_choice_count}문제, 주관식 {subjective_count}문제
 {unit_info}
 {sub_unit_info}
+{question_type_info}
 
-객관식 {multiple_choice_count}문제, 주관식 {subjective_count}문제로 구성하고, {question_type_info}를 포함하여 작성해주세요.
+## 성취수준 기준
+{achievement_prompt}
 
-## 중요: 성취수준에 맞는 문제 생성
-- 아래에 제시된 성취수준을 "참고 기준"으로 사용하여 문제를 생성해주세요
-- 성취수준 설명서를 그대로 출력하지 마세요
-- 성취수준에 맞는 "구체적인 문제"를 생성해주세요
+---
 
-## 언어 사용 지침:
-1. **자연스러운 한국어**: 초등학생이 이해할 수 있는 친근하고 자연스러운 표현 사용
-2. **일관된 톤앤매너**: 모든 문제에서 동일한 말투와 어조 유지
-3. **적절한 어휘**: {difficulty} 난이도에 맞는 어휘 선택
-4. **명확한 문장**: 문장이 길어지지 않도록 간결하고 명확하게 작성
-5. **실생활 연계**: 가능한 한 일상생활과 연결된 구체적인 예시 사용
+# 출력 형식 (다음 예시와 정확히 동일한 형식으로 출력하세요)
 
-## 문제지 형식:
-1. (객관식 문제 내용)
-   (1) 보기1
-   (2) 보기2
-   (3) 보기3
-   (4) 보기4
+```
+[객관식 문제]
 
-2. (객관식 문제 내용)
-   (1) 보기1
-   (2) 보기2
-   (3) 보기3
-   (4) 보기4
+1. 빵 3개를 똑같이 2명이 나누어 먹으려고 합니다. 한 명이 먹을 수 있는 빵은 전체 빵의 얼마인가요?
 
-3. (주관식 문제 내용)
-   답: 
+① 1/2
+② 2/3
+③ 3/2
+④ 1/3
 
-4. (객관식 문제 내용)
-   (1) 보기1
-   (2) 보기2
-   (3) 보기3
-   (4) 보기4
+2. 길이가 4/5 m인 끈을 똑같이 2명이 나누어 가지려고 합니다. 한 명이 가지게 되는 끈의 길이는 몇 m인가요?
 
-5. (주관식 문제 내용)
-   답: 
+① 2/5 m
+② 4/10 m
+③ 8/5 m
+④ 4/5 m
+
+[주관식 문제]
+
+3. 사과 5개를 똑같이 3명이 나누어 먹으려고 합니다. 한 명이 먹는 사과는 전체 사과의 얼마인지 분수로 나타내 보세요.
+답: 
+
+4. 설탕 1/4 kg을 똑같이 2명이 나누어 먹으려고 합니다. 한 명이 먹는 설탕은 몇 kg인가요?
+답: 
 
 [정답]
-1번-(정답번호), 2번-(정답번호), 3번-(답안), 4번-(정답번호), 5번-(답안)
+1번-①, 2번-①, 3번-5/3, 4번-1/8
+```
 
-위 설정과 언어 사용 지침에 맞는 자연스럽고 친근한 문제지를 생성해주세요. 
+## 중요 지침
+- **위 예시와 정확히 동일한 형식으로 출력하세요**
+- **줄바꿈과 빈 줄을 정확히 따라하세요**
+- **초등학생 수준의 자연스러운 한국어 사용**
+- **LaTeX 수식 사용 금지 (2/5, 3/4 형식만 사용)**
+- **실생활 연계 예시 사용**
 
-## 주의사항:
-- 설정 정보는 문제지 내용에 포함하지 마세요
-- "자, 그럼...", "함께 풀어볼까요?" 같은 안내문이나 설명문을 생성하지 마세요
-- 문제지만 바로 생성하고, 불필요한 텍스트는 포함하지 마세요
-- 문제지 형식에 맞춰 객관식 문제, 주관식 문제, 정답만 깔끔하게 작성해주세요
-- **절대 성취수준 설명서를 출력하지 마세요!**
+---
 
-## 소단원별 문제 출제 지침:
-{sub_unit_info and f"- 반드시 선택된 소단원({', '.join([sub_unit['label'] if isinstance(sub_unit, dict) else sub_unit for sub_unit in sub_units])})에 맞는 구체적인 문제를 출제해주세요." or ""}
-{sub_unit_info and f"- 각 소단원별로 균등하게 문제를 배분해주세요." or ""}
-{sub_unit_info and f"- 소단원 내용과 직접적으로 관련된 문제만 출제해주세요." or ""}
-{sub_unit_info and f"- 예시: '분수 ÷ 자연수' 소단원이면 분수를 자연수로 나누는 구체적인 문제를 출제해주세요." or ""}
-
-## 문제 배치 방식:
-- 객관식과 주관식을 중간중간 섞어서 출제해주세요
-- 연속으로 같은 유형의 문제가 나오지 않도록 해주세요
-- 예시: 객관식 → 객관식 → 주관식 → 객관식 → 주관식
-
-## 최종 확인사항:
-- 성취수준을 "기준"으로 사용하여 문제를 생성했는지 확인
-- 성취수준 설명서가 문제지 내용에 포함되지 않았는지 확인
-- 실제 문제지만 생성되었는지 확인
+# 최종 확인
+위 예시와 정확히 동일한 형식으로 {subject} {difficulty} 난이도 문제지를 생성하세요.
+줄바꿈과 빈 줄을 정확히 따라하세요!
 """
         
         return prompt
