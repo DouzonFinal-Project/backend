@@ -250,25 +250,93 @@ class ProblemGeneratorHandler:
     
     def _split_into_words(self, text: str) -> List[str]:
         """
-        텍스트를 단어별로 분할합니다. 줄바꿈과 공백을 보존하여 Cursor처럼 타이핑 효과를 위한 단어 단위 분할.
+        텍스트를 자연스러운 단위로 분할합니다. 문제지 형식에 맞게 최적화.
         
         Args:
             text: 분할할 텍스트
         
         Returns:
-            List[str]: 단어별로 분할된 리스트 (줄바꿈과 공백 보존)
+            List[str]: 자연스럽게 분할된 리스트
         """
         import re
         
-        # 줄바꿈과 공백을 보존하는 정규식
-        pattern = r'(\S+|\s+|\n)'
-        matches = re.findall(pattern, text)
+        # 1단계: LaTeX 수식 강제 제거 (모든 패턴)
+        print(f"🔍 원본 텍스트: {repr(text)}")
         
-        # 빈 문자열 제거하되 줄바꿈과 공백은 보존
+        # 모든 LaTeX 패턴 강제 제거
+        # $ 기호 제거
+        text = re.sub(r'\$', '', text)
+        
+        # 모든 frac 패턴 제거 (완전한 것, 불완전한 것 모두)
+        text = re.sub(r'frac\{[^}]*\}?', '', text)  # frac{숫자} 또는 frac{숫자}{숫자}
+        text = re.sub(r'\\frac\{[^}]*\}?', '', text)  # \frac{숫자} 또는 \frac{숫자}{숫자}
+        text = re.sub(r'\\\\frac\{[^}]*\}?', '', text)  # \\frac{숫자} 또는 \\frac{숫자}{숫자}
+        
+        # 이상한 패턴 제거: }{숫자} 또는 숫자}{
+        text = re.sub(r'\}\{(\d+)\}', r'/\1', text)  # }{숫자} → /숫자
+        text = re.sub(r'(\d+)\}\{', r'\1/', text)    # 숫자}{ → 숫자/
+        
+        # 남은 이상한 문자들 제거
+        text = re.sub(r'[\\{}]', '', text)  # 백슬래시, 중괄호 제거
+        
+        print(f"🔍 최종 정리 후: {repr(text)}")
+        
+        # 2단계: 문제 형식 강제 정리
+        # 선택지 번호 문제 해결: ④ 12 . → ④ 1/2
+        text = re.sub(r'([①②③④])\s+(\d+)\s*\.', r'\1 \2', text)
+        
+        # 선택지 연속 문제 해결: ③ 5/3 m④ 15/6 m → ③ 5/3 m\n④ 15/6 m
+        text = re.sub(r'([①②③④])\s+([^①②③④]+)([①②③④])', r'\1 \2\n\3', text)
+        
+        # 선택지 앞에 문제가 붙는 문제 해결: ② frac1/5 → ② 1/5
+        text = re.sub(r'([①②③④])\s+frac(\d+/\d+)', r'\1 \2', text)
+        
+        # 선택지 공백 문제 해결: ①2/5 m → ① 2/5 m
+        text = re.sub(r'([①②③④])(\d+/\d+)', r'\1 \2', text)
+        
+        # 분수 공백 정리: 4/5 자 루 → 4/5자루
+        text = re.sub(r'(\d+/\d+)\s+([가-힣]+)', r'\1\2', text)
+        # 숫자와 단위 사이 공백 제거
+        text = re.sub(r'(\d+)\s+([가-힣]+)', r'\1\2', text)
+        
+        # 3단계: 섹션 제목 처리
+        text = re.sub(r'(\[[^\]]+\])', r'\1\n\n', text)
+        
+        # 4단계: 문제 번호 처리
+        text = re.sub(r'(\d+\.)', r'\n\1 ', text)
+        
+        # 5단계: 선택지 처리 (더 정확하게)
+        # ① 다음에 바로 내용이 오도록
+        text = re.sub(r'([①②③④])\s*', r'\n\1 ', text)
+        
+        # 6단계: "답:" 처리
+        text = re.sub(r'(답:)', r'\n\1 \n\n', text)
+        
+        # 7단계: 불필요한 공백 정리
+        text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)  # 연속된 빈 줄 제거
+        text = re.sub(r'^\s+', '', text)  # 시작 공백 제거
+        text = re.sub(r'\s+$', '', text)  # 끝 공백 제거
+        
+        # 8단계: 문장 단위로 분할
+        sentences = re.split(r'([.!?])', text)
+        
         result = []
-        for match in matches:
-            if match.strip() or match in ['\n', ' ', '\t']:
-                result.append(match)
+        for i, part in enumerate(sentences):
+            if not part.strip():
+                continue
+                
+            # 마침표, 물음표, 느낌표인 경우
+            if re.match(r'^[.!?]$', part):
+                if result:
+                    result[-1] += part
+                continue
+            
+            # 줄바꿈이 포함된 경우
+            if '\n' in part:
+                result.append(part)
+            else:
+                # 일반 텍스트인 경우
+                result.append(part + ' ')
         
         return result
 
@@ -427,49 +495,41 @@ class ProblemGeneratorHandler:
 
 ---
 
-# 출력 형식 (다음 예시와 정확히 동일한 형식으로 출력하세요)
+# 출력 형식
 
-```
+다음 형식으로 문제지를 생성하세요:
+
 [객관식 문제]
 
-1. 빵 3개를 똑같이 2명이 나누어 먹으려고 합니다. 한 명이 먹을 수 있는 빵은 전체 빵의 얼마인가요?
+1. 문제 내용
+① 선택지1
+② 선택지2
+③ 선택지3
+④ 선택지4
 
-① 1/2
-② 2/3
-③ 3/2
-④ 1/3
-
-2. 길이가 4/5 m인 끈을 똑같이 2명이 나누어 가지려고 합니다. 한 명이 가지게 되는 끈의 길이는 몇 m인가요?
-
-① 2/5 m
-② 4/10 m
-③ 8/5 m
-④ 4/5 m
+2. 문제 내용
+① 선택지1
+② 선택지2
+③ 선택지3
+④ 선택지4
 
 [주관식 문제]
 
-3. 사과 5개를 똑같이 3명이 나누어 먹으려고 합니다. 한 명이 먹는 사과는 전체 사과의 얼마인지 분수로 나타내 보세요.
+3. 문제 내용
 답: 
 
-4. 설탕 1/4 kg을 똑같이 2명이 나누어 먹으려고 합니다. 한 명이 먹는 설탕은 몇 kg인가요?
+4. 문제 내용
 답: 
 
 [정답]
-1번-①, 2번-①, 3번-5/3, 4번-1/8
-```
+1번-①, 2번-①, 3번-답, 4번-답
 
 ## 중요 지침
-- **위 예시와 정확히 동일한 형식으로 출력하세요**
-- **줄바꿈과 빈 줄을 정확히 따라하세요**
-- **초등학생 수준의 자연스러운 한국어 사용**
-- **LaTeX 수식 사용 금지 (2/5, 3/4 형식만 사용)**
-- **실생활 연계 예시 사용**
-
----
-
-# 최종 확인
-위 예시와 정확히 동일한 형식으로 {subject} {difficulty} 난이도 문제지를 생성하세요.
-줄바꿈과 빈 줄을 정확히 따라하세요!
+- 각 문제와 선택지 사이에 빈 줄을 넣으세요
+- 각 문제 번호마다 줄바꿈을 하세요
+- 초등학생 수준의 자연스러운 한국어 사용
+- 실생활 연계 예시 사용
+- {subject} {difficulty} 난이도에 맞는 문제를 생성하세요
 """
         
         return prompt
