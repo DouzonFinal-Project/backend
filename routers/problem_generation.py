@@ -71,13 +71,13 @@ async def generate_problem_set_endpoint(settings: Dict[str, Any]):
 @router.post("/generate-streaming")
 async def generate_problem_set_streaming_endpoint(settings: Dict[str, Any]):
     """
-    문제출제설정에 맞는 문제지를 스트리밍으로 생성합니다.
+    문제출제설정에 맞는 문제지를 진정한 실시간 스트리밍으로 생성합니다.
     
     Args:
         settings: 문제 출제 설정 정보
     
     Returns:
-        StreamingResponse: 스트리밍으로 생성되는 문제지 내용
+        StreamingResponse: 실시간 스트리밍으로 생성되는 문제지 내용
     """
     try:
         # 입력값 검증
@@ -99,25 +99,34 @@ async def generate_problem_set_streaming_endpoint(settings: Dict[str, Any]):
         
         async def generate_stream():
             try:
-                async for chunk in problem_generator_handler.generate_problem_set_streaming(settings):
-                    if chunk and chunk.strip():
-                        # SSE 형식으로 데이터 전송
-                        yield f"data: {json.dumps({'chunk': chunk, 'type': 'content'}, ensure_ascii=False)}\n\n"
+                # 즉시 스트리밍 시작 신호 (Cursor처럼)
+                yield f"data: {json.dumps({'type': 'start', 'message': '문제지 생성 시작'}, ensure_ascii=False)}\n\n"
+                
+                chunk_count = 0
+                async for word in problem_generator_handler.generate_problem_set_streaming(settings):
+                    if word and (word.strip() or word in ['\n', ' ', '\t']):
+                        chunk_count += 1
+                        # Cursor처럼 단어별 SSE 전송
+                        yield f"data: {json.dumps({'chunk': word, 'type': 'content', 'chunk_id': chunk_count}, ensure_ascii=False)}\n\n"
                 
                 # 스트리밍 완료 신호
-                yield f"data: {json.dumps({'type': 'done', 'message': '문제지 생성 완료'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'message': '문제지 생성 완료', 'total_chunks': chunk_count}, ensure_ascii=False)}\n\n"
                 
             except Exception as e:
+                print(f"스트리밍 생성 중 오류: {e}")
                 error_data = json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)
                 yield f"data: {error_data}\n\n"
         
         return StreamingResponse(
             generate_stream(),
-            media_type="text/plain",
+            media_type="text/event-stream",  # 올바른 SSE 미디어 타입
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-                "Content-Type": "text/event-stream",
+                "Content-Type": "text/event-stream; charset=utf-8",
+                "Access-Control-Allow-Origin": "*",  # CORS 지원
+                "Access-Control-Allow-Headers": "Cache-Control",
+                "X-Accel-Buffering": "no",  # Nginx 버퍼링 비활성화
             }
         )
         
