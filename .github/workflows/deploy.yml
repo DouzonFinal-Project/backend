@@ -45,16 +45,10 @@ jobs:
           docker build -t "$BACK_IMAGE:latest" .
           docker push "$BACK_IMAGE:latest"
 
-      - name: Deploy to App EC2 via SSM
+      - name: Deploy backend via SSM
         run: |
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Role,Values=backend" \
-            --parameters 'commands=[
-              "set -eux",
-              "cd /opt/backend",
-              "BACK_IMAGE='${BACK_IMAGE}:latest' docker compose pull",
-              "BACK_IMAGE='${BACK_IMAGE}:latest' docker compose up -d"
-            ]' \
-            --comment "Deploy backend" \
-            --region "$AWS_REGION"
+            --parameters commands='["bash -lc '\''/opt/backend/deploy.sh latest'\''"]' \
+            --region ap-northeast-2
