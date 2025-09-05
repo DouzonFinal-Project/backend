@@ -73,8 +73,9 @@ class Settings(BaseSettings):
     # =========================
     # LLM (Gemini only)
     # =========================
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
     GEMINI_API_KEY: str  # 필수
+    GEMINI_MODEL_EMBED="model/text-embedding-004"
     LLM_TIMEOUT: int = 25
     LLM_TEMPERATURE: float = 0.2
     LLM_MAX_TOKENS: int = 1024
@@ -86,20 +87,12 @@ class Settings(BaseSettings):
     # =========================
     MILVUS_HOST: str = "localhost"
     MILVUS_PORT: int = 19530
-    MILVUS_COLLECTION: str = "docs_v1"
+    MILVUS_COLLECTION_NAME: str = "lang_counceling_v1"
     MILVUS_DIM: int = 768
     MILVUS_INDEX: Literal["HNSW", "IVF_FLAT", "IVF_SQ8", "DISKANN", "FLAT"] = "HNSW"
     MILVUS_METRIC: Literal["IP", "COSINE", "L2"] = "IP"
 
-    # =========================
-    # Object Storage (MinIO / S3 호환)
-    # =========================
-    MINIO_ENDPOINT: str = "localhost:9000"  # 예: "minio:9000" 또는 "play.min.io:9000"
-    MINIO_ACCESS_KEY: str = "admin"
-    MINIO_SECRET_KEY: str = "admin1234"
-    MINIO_BUCKET: str = "teacher-docs"
-    MINIO_SECURE: bool = False  # http=False, https=True
-
+   
     # =========================
     # PDF / WeasyPrint (선택)
     # =========================
