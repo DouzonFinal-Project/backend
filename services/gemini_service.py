@@ -25,7 +25,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+GEMINI_MODEL_CHAT = os.getenv("GEMINI_MODEL_CHAT", "gemini-2.5-flash-lite")
 
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
@@ -72,7 +72,7 @@ class GeminiChatService:
     
     def __init__(self):
         self.model = ChatGoogleGenerativeAI(
-            model=GEMINI_MODEL,
+            model=GEMINI_MODEL_CHAT,
             google_api_key=GEMINI_API_KEY
         )
         self._chat_semaphore = asyncio.Semaphore(3)  # 동시 요청 제한
@@ -129,7 +129,7 @@ Please provide all responses in Korean.
 
 At the end of your answer, provide the user with two suggested questions.
 
-Don't introduce yourself unless the user asks you to.
+Don't introduce yourself and say hello unless the user asks you to.
 """
     
     def _create_context_from_search_results(self, search_results: List[Dict[str, Any]]) -> str:
