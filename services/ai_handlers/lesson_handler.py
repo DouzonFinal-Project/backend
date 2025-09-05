@@ -1,14 +1,17 @@
 from sqlalchemy.orm import Session
 from models.lessons import Lesson as LessonModel
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from sqlalchemy import func, and_
 from config.settings import settings
 from datetime import datetime, timedelta
 import re
 
-# Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
 
 async def handle_lesson_query(message: str, db: Session):
@@ -143,8 +146,8 @@ async def build_next_lesson_response(lesson, message: str, is_tomorrow: bool = F
     6. PPT 자료가 있다면 "수업에 사용될 PPT 자료는 아래에서 확인하실 수 있습니다:"라는 문구로 안내하세요
     """
     
-    response = await model.generate_content_async(prompt)
-    return response.text
+    response = await model.ainvoke(prompt)
+    return response.content
 
 
 async def build_today_lessons_response(lessons, message: str, date):
@@ -183,8 +186,8 @@ async def build_today_lessons_response(lessons, message: str, date):
     6. PPT 자료가 있다면 "수업에 사용될 PPT 자료는 아래 링크에서 확인하실 수 있습니다:"라는 문구로 안내하세요
     """
     
-    response = await model.generate_content_async(prompt)
-    return response.text
+    response = await model.ainvoke(prompt)
+    return response.content
 
 
 async def build_subject_lesson_response(lesson, message: str):
@@ -220,5 +223,5 @@ async def build_subject_lesson_response(lesson, message: str):
     5. PPT 자료가 있다면 "수업에 사용될 PPT 자료는 아래 링크에서 확인하실 수 있습니다:"라는 문구로 안내하세요
     """
     
-    response = await model.generate_content_async(prompt)
-    return response.text 
+    response = await model.ainvoke(prompt)
+    return response.content 

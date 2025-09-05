@@ -1,14 +1,17 @@
 from sqlalchemy.orm import Session
 from models.notices import Notice as NoticeModel
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from sqlalchemy import func
 from config.settings import settings
 from datetime import datetime, timedelta
 import re
 
-# Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
 
 
@@ -165,8 +168,8 @@ async def build_notice_response(notices, message: str):
     """
     
 
-    response = await model.generate_content_async(prompt)
-    return response.text
+    response = await model.ainvoke(prompt)
+    return response.content
 
 
 async def build_notice_response_with_summary(notices, message: str, start_date, end_date):
@@ -216,8 +219,8 @@ async def build_notice_response_with_summary(notices, message: str, start_date, 
     7. 미래 일정은 '예정되어 있습니다' 또는 '있습니다'로 통일해서 표현해주세요
     """
     
-    response = await model.generate_content_async(prompt)
+    response = await model.ainvoke(prompt)
 
-    return response.text
+    return response.content
 
 

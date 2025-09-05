@@ -1,14 +1,17 @@
 from sqlalchemy.orm import Session
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from config.settings import settings
 from models.attendance import Attendance as AttendanceModel
 from sqlalchemy import func
 from datetime import datetime, timedelta
 import re
 
-# ✅ Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# ✅ LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
 
 def handle_attendance_query(message: str, db: Session):
@@ -104,5 +107,5 @@ def build_ai_response(records, message: str):
     위 정보를 바탕으로 한국어로 자연스럽게 요약하여 답변해 주세요.
     """
 
-    response = model.generate_content(prompt)
-    return response.text
+    response = model.invoke(prompt)
+    return response.content

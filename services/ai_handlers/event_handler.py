@@ -1,14 +1,17 @@
 from sqlalchemy.orm import Session
 from models.events import Event as EventModel
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from sqlalchemy import func
 from config.settings import settings
 from datetime import datetime, timedelta
 import re
 
-# Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
 
 async def handle_event_query(message: str, db: Session):
@@ -190,8 +193,8 @@ async def build_ai_response(events, message: str):
     현재 날짜를 기준으로 위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
     """
     
-    response = await model.generate_content_async(prompt)
-    return response.text
+    response = await model.ainvoke(prompt)
+    return response.content
 
 
 async def extract_event_title(message: str) -> str:
@@ -211,8 +214,8 @@ async def extract_event_title(message: str) -> str:
     """
     
     try:
-        response = await model.generate_content_async(prompt)
-        result = response.text.strip()
+        response = await model.ainvoke(prompt)
+        result = response.content.strip()
         
         # 결과가 너무 길거나 의미없는 경우 키워드 기반 추출 사용
         if len(result) > 20 or not result:
@@ -312,8 +315,8 @@ async def classify_event_type(event_title: str) -> str:
     """
     
     try:
-        response = await model.generate_content_async(prompt)
-        result = response.text.strip()
+        response = await model.ainvoke(prompt)
+        result = response.content.strip()
         
         # 응답이 유효한 유형인지 확인
         if result in event_types:
