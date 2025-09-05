@@ -19,6 +19,9 @@ from routers import (
     front_proxy, pdf_reports, problem_generation
 )
 
+# ✅ gemini-langchain-chatbot-service 라우터 임포트
+from routers import gemini, milvus
+
 app = FastAPI(
     title="Teacher Assistant API",
     description="초등학교 교사 행정지원 AI 챗봇 백엔드 API",
@@ -67,6 +70,10 @@ app.include_router(ai_chatbot.router,     prefix="/v1")   # ✅ 새 AI 통합 �
 app.include_router(ai.router,             prefix="/v1")   # ✅ 새 AI 챗봇 라우터
 app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라우터
 app.include_router(problem_generation.router, prefix="/v1")   # ✅ 문제 생성 라우터
+
+# ✅ gemini-langchain-chatbot-service 라우터 등록
+app.include_router(milvus.router, prefix="/api/milvus", tags=["Milvus 벡터 DB"])
+app.include_router(gemini.router, prefix="/api/gemini", tags=["Gemini AI 채팅"])
 
 # ✅ 헬스체크 엔드포인트
 @app.get("/health")
