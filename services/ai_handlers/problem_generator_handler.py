@@ -530,6 +530,11 @@ class ProblemGeneratorHandler:
 - 초등학생 수준의 자연스러운 한국어 사용
 - 실생활 연계 예시 사용
 - {subject} {difficulty} 난이도에 맞는 문제를 생성하세요
+- 절대로 제목, 단원, 난이도 정보를 출력하지 마세요
+- 문제만 출력하세요
+- 반드시 객관식 {multiple_choice_count}문제, 주관식 {subjective_count}문제로 구성하세요
+- 객관식 문제는 1번부터 {multiple_choice_count}번까지
+- 주관식 문제는 {multiple_choice_count + 1}번부터 {multiple_choice_count + subjective_count}번까지
 """
         
         return prompt
