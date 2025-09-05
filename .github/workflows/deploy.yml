@@ -1,32 +1,35 @@
-name: Deploy backend
+name: Backend CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
     paths:
-      - '**/*.py'
-      - 'requirements.txt'
-      - 'Dockerfile'
-      - '.github/workflows/deploy.yml'
-      - 'docker-compose.yml'
+      - "**/*.py"
+      - "requirements.txt"
+      - "Dockerfile"
+      - ".github/workflows/**"
 
 permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPO: app/backend
+  ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  IMAGE_URI: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-2.amazonaws.com/app/backend
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
-    env:
-      AWS_REGION: ap-northeast-2
-      ACCOUNT_ID: '373317459179'     # ← 그대로 값만 둠
-      ECR_REPO: 'app/backend'            # ← 백엔드 ECR 리포지토리명
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -35,20 +38,39 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 🔧 여기서 BACK_IMAGE를 계산해 환경변수로 내보냄
-      - name: Compute BACK_IMAGE
-        run: |
-          echo "BACK_IMAGE=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}" >> $GITHUB_ENV
+      - name: Extract metadata (tags)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_URI }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
 
-      - name: Build & Push backend image
+      - name: Build & Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+
+      - name: Extract sha tag
+        id: tag
         run: |
-          docker build -t "$BACK_IMAGE:latest" .
-          docker push "$BACK_IMAGE:latest"
+          echo "TAG=$(echo '${{ steps.meta.outputs.tags }}' | tr ' ' '\n' | grep ':sha-' | head -n1 | awk -F: '{print $2}')" >> $GITHUB_OUTPUT
 
       - name: Deploy backend via SSM
         run: |
+          SHA_TAG="${{ steps.tag.outputs.TAG }}"
+          echo "Deploy TAG=${SHA_TAG}"
+
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Role,Values=backend" \
-            --parameters commands='["bash -lc '\''/opt/backend/deploy.sh latest'\''"]' \
-            --region ap-northeast-2
+            --parameters "commands=[
+              \"bash -lc 'export AWS_REGION=${{ env.AWS_REGION }} ACCOUNT_ID=${{ env.ACCOUNT_ID }} REPO=${{ env.ECR_REPO }} TAG=${SHA_TAG}; sudo -E /opt/backend/deploy.sh ${SHA_TAG}'\"
+            ]" \
+            --comment "Deploy backend ${SHA_TAG}" \
+            --region ${{ env.AWS_REGION }} \
+            --cloud-watch-output-config "CloudWatchLogGroupName=/aws/ssm/RunCommand,CloudWatchOutputEnabled=true"
