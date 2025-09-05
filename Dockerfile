@@ -7,9 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# 시스템 의존성(필요시)
+# 시스템 의존성
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl && rm -rf /var/lib/apt/lists/*
+    libcairo2 libpango-1.0-0 libpangocairo-1.0-0 \
+    libgdk-pixbuf2.0-0 libglib2.0-0 libffi8 libxml2 libxslt1.1 \
+    fonts-dejavu fonts-liberation fonts-noto-core shared-mime-info \
+    ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # 의존성
 COPY requirements.txt .
