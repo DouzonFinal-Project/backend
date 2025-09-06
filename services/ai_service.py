@@ -5,6 +5,7 @@ from services.ai_handlers.grade_handler import handle_grade_query
 from services.ai_handlers.event_handler import handle_event_query
 from services.ai_handlers.notice_handler import handle_notice_query
 from services.ai_handlers.lesson_handler import handle_lesson_query
+from services.ai_handlers.attendance_handler import handle_attendance_query
 from services.ai_handlers.problem_generator_handler import handle_problem_generation
 
 async def process_ai_query(message: str, db: Session):
@@ -34,11 +35,15 @@ async def process_ai_query(message: str, db: Session):
     # 수업 정보 조회
     elif any(keyword in user_message for keyword in ["수업", "시간표", "교시", "다음시간"]):
         return await handle_lesson_query(message, db)
+    
+    # 출결 관리 조회
+    elif any(keyword in user_message for keyword in ["출석", "결석", "출결", "출석률", "출석현황"]):
+        return await handle_attendance_query(message, db)
 
     
     # 기본 응답
     else:
-        return "죄송합니다. 현재는 선생님/학생 명단 조회, 성적 조회, 이벤트/일정 조회 및 추가, 공지사항 조회, 수업 정보 조회 기능만 지원합니다."
+        return "죄송합니다. 현재는 선생님/학생 명단 조회, 성적 조회, 이벤트/일정 조회 및 추가, 공지사항 조회, 수업 정보 조회, 출결 관리 기능만 지원합니다."
 
 async def generate_problem_set(settings: dict):
     """

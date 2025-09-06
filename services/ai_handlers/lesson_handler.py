@@ -129,21 +129,18 @@ async def build_next_lesson_response(lesson, message: str, is_tomorrow: bool = F
     time_info = "내일" if is_tomorrow else "오늘"
     
     prompt = f"""
-    현재 날짜: {current_date}
-    
     다음은 {time_info}의 다음 수업 정보입니다:
-    
     {lesson_info}
     
-    사용자가 "{message}"라고 질문했습니다. 
+    다음 형식으로 무조건 답변해주세요:
     
-    다음 지침에 따라 답변해주세요:
-    1. 별표(*) 기호를 사용하지 마세요
-    2. 간결하고 전문적인 톤으로 답변하세요
-    3. 존댓말을 사용하되 자연스럽게 하세요
-    4. 수업 준비에 도움이 되는 실용적인 정보를 포함하세요
-    5. 불필요한 반복을 피하고 핵심 정보에 집중하세요
-    6. PPT 자료가 있다면 "수업에 사용될 PPT 자료는 아래에서 확인하실 수 있습니다:"라는 문구로 안내하세요
+    ****다음 수업 정보****
+    • 과목명 단원명. 제목
+    • 내용: 수업 내용 요약
+    • 시간: 시작시간 ~ 종료시간 (교시)
+    링크
+    
+    간단명료하게 답변해주세요.
     """
     
     response = await model.ainvoke(prompt)
@@ -169,21 +166,18 @@ async def build_today_lessons_response(lessons, message: str, date):
     lessons_text = "\n---\n".join(lessons_info)
     
     prompt = f"""
-    현재 날짜: {current_date}
-    
     다음은 오늘의 수업 일정입니다:
-    
     {lessons_text}
     
-    사용자가 "{message}"라고 질문했습니다. 
+    다음 형식으로 무조건 답변해주세요:
     
-    다음 지침에 따라 답변해주세요:
-    1. 별표(*) 기호를 사용하지 마세요
-    2. 간결하고 전문적인 톤으로 답변하세요
-    3. 존댓말을 사용하되 자연스럽게 하세요
-    4. 오늘 수업 일정을 체계적으로 정리해주세요
-    5. 불필요한 반복을 피하고 핵심 정보에 집중하세요
-    6. PPT 자료가 있다면 "수업에 사용될 PPT 자료는 아래 링크에서 확인하실 수 있습니다:"라는 문구로 안내하세요
+    ****다음 수업 정보****
+    • 과목명 단원명. 제목
+    • 내용: 수업 내용 요약
+    • 시간: 시작시간 ~ 종료시간 (교시)
+    링크
+    
+    간단명료하게 답변해주세요.
     """
     
     response = await model.ainvoke(prompt)
@@ -207,20 +201,18 @@ async def build_subject_lesson_response(lesson, message: str):
         lesson_info += f"\nPPT 자료 링크: {lesson.ppt_link}"
     
     prompt = f"""
-    현재 날짜: {current_date}
-    
     다음은 {lesson.subject_name} 수업 정보입니다:
-    
     {lesson_info}
     
-    사용자가 "{message}"라고 질문했습니다. 
+    다음 형식으로 무조건 답변해주세요:
     
-    다음 지침에 따라 답변해주세요:
-    1. 별표(*) 기호를 사용하지 마세요
-    2. 간결하고 전문적인 톤으로 답변하세요
-    3. 존댓말을 사용하되 자연스럽게 하세요
-    4. 불필요한 반복을 피하고 핵심 정보에 집중하세요
-    5. PPT 자료가 있다면 "수업에 사용될 PPT 자료는 아래 링크에서 확인하실 수 있습니다:"라는 문구로 안내하세요
+    ****다음 수업 정보****
+    • 과목명 단원명. 제목
+    • 내용: 수업 내용 요약
+    • 시간: 시작시간 ~ 종료시간 (교시)
+    링크
+    
+    간단명료하게 답변해주세요.
     """
     
     response = await model.ainvoke(prompt)
