@@ -175,25 +175,19 @@ class ProblemGeneratorHandler:
                     print(f"응답 상태: {response.status_code}")
                     
                     if response.status_code == 200:
-                        # Cursor처럼 단어별 스트리밍 - 디버깅 버전
+                        # Cursor처럼 단어별 스트리밍
                         async for line in response.aiter_lines():
                             if line.strip():
-                                # 디버깅: 원본 라인 확인
-                                print(f"🔍 원본 라인: {repr(line)}")
-                                
                                 # JSON 구조를 무시하고 텍스트만 추출
                                 text_chunks = self._extract_text_from_line(line)
-                                print(f"🔍 추출된 텍스트 청크: {text_chunks}")
                                 
                                 for text_chunk in text_chunks:
                                     if text_chunk and text_chunk.strip():
                                         # LaTeX 수식을 초등학생이 이해할 수 있는 표기로 변환
                                         cleaned_text = self._clean_latex_notation(text_chunk)
-                                        print(f"🔍 정리된 텍스트: {repr(cleaned_text)}")
                                         
                                         # 단어별로 분할하여 스트리밍
                                         words = self._split_into_words(cleaned_text)
-                                        print(f"🔍 분할된 단어들: {[repr(word) for word in words]}")
                                         
                                         for word in words:
                                             if word.strip() or word in ['\n', ' ', '\t']:
@@ -497,9 +491,9 @@ class ProblemGeneratorHandler:
 
 # 출력 형식
 
-다음 형식으로 문제지를 생성하세요:
+무조건 다음 형식으로 문제지를 생성하세요:
 
-[객관식 문제]
+- 객관식일 경우 아래와 같이 해주세요
 
 1. 문제 내용
 ① 선택지1
@@ -507,23 +501,21 @@ class ProblemGeneratorHandler:
 ③ 선택지3
 ④ 선택지4
 
+- 주관식일 경우 아래와 같이 해주세요
+
 2. 문제 내용
-① 선택지1
-② 선택지2
-③ 선택지3
-④ 선택지4
-
-[주관식 문제]
-
-3. 문제 내용
 답: 
-
-4. 문제 내용
-답: 
-
+ 
+- 문제지의 정답과 해설은 무조건 아래와 같은 형식으로 해주세요.
 [정답]
-1번-①, 2번-①, 3번-답, 4번-답
+1번. 
+해설 :
+띄우고
+2번. 
+해설 :
 
+
+반복된 해설은 절대 하지마세요.
 ## 중요 지침
 - 각 문제와 선택지 사이에 빈 줄을 넣으세요
 - 각 문제 번호마다 줄바꿈을 하세요
@@ -535,6 +527,9 @@ class ProblemGeneratorHandler:
 - 반드시 객관식 {multiple_choice_count}문제, 주관식 {subjective_count}문제로 구성하세요
 - 객관식 문제는 1번부터 {multiple_choice_count}번까지
 - 주관식 문제는 {multiple_choice_count + 1}번부터 {multiple_choice_count + subjective_count}번까지
+- LaTeX 수학 표기법(imes, frac, cdot 등)을 절대 사용하지 마세요
+- 모든 수학 기호는 일반 텍스트로만 작성하세요
+- 곱셈은 ×, 나눗셈은 ÷, 분수는 / 기호를 사용하세요
 """
         
         return prompt
