@@ -19,7 +19,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt, Retrying
 # =========================
 load_dotenv()
 
-MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_HOST = os.getenv("MILVUS_HOST", "10.0.141.42")
 MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
 MILVUS_COLLECTION_NAME = os.getenv("MILVUS_COLLECTION_NAME", "lang_counseling_v1")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

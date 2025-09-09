@@ -25,5 +25,5 @@ COPY . .
 # RUN useradd -m appuser
 # USER appuser
 
-# (예시) 실행
+# 실행
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -38,7 +38,6 @@ app = FastAPI(
 
 # ✅ CORS 설정 (프론트엔드 연동 대비)
 origins = [
-    "http://localhost:3000",  # 로컬 개발용 React/Next.js
     "http://3.34.241.88",# 추후 배포 도메인 추가 가능
 ]
 
@@ -92,7 +91,7 @@ def health_check():
 @app.on_event("startup")
 def _connect_milvus():
     try:
-        connections.connect("default", host="localhost", port="19530")
+        connections.connect("default", host="10.0.141.42", port="19530")
     except:
         pass  # Milvus 연결 실패해도 서버 시작
 
