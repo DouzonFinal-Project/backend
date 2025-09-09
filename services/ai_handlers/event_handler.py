@@ -200,7 +200,13 @@ async def build_ai_response(events, message: str):
     {event_list}
     
     사용자가 "{message}"라고 질문했습니다. 
-    현재 날짜를 기준으로 위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
+    위 정보를 바탕으로 간결하고 전문적인 한국어로 답변해주세요.
+    
+    답변 형식:
+    - 이모지 사용 금지
+    - 불필요한 수식어 제거
+    - 날짜별로 간단명료하게 정리
+    - 예시: "9월 9일: 축구대회, 박성주 상담"
     """
     
     response = await model.ainvoke(prompt)
@@ -603,10 +609,24 @@ async def parse_single_date(message: str):
 
 
 async def parse_multiple_events(message: str):
-    """여러 이벤트 파싱 (예: "9월 11일 김민주 상담, 9월 12일 박성주 상담")"""
+    """여러 이벤트 파싱 (기간 일정 제외)"""
+    
+    # 기간 일정 패턴 확인 (같은 제목의 연속 기간)
+    period_patterns = [
+        r'(\d{1,2}월\s*\d{1,2}일)\s*부터\s*(\d{1,2}월\s*\d{1,2}일)\s*까지\s*([^일정추가]+)',
+        r'(\d{1,2}일)\s*부터\s*(\d{1,2}일)\s*까지\s*([^일정추가]+)',
+        r'내일부터\s*모레까지\s*([^일정추가]+)',
+        r'오늘부터\s*(\d{1,2}일)\s*까지\s*([^일정추가]+)'
+    ]
+    
+    # 기간 일정인지 확인
+    for pattern in period_patterns:
+        if re.search(pattern, message):
+            return None  # 기간 일정이면 None 반환 (단일 기간 일정으로 처리)
+    
     # AI를 사용하여 여러 이벤트 파싱
     prompt = f"""
-    다음 메시지에서 여러 개의 일정을 추출해주세요:
+    다음 메시지에서 여러 개의 서로 다른 일정이 있는지 확인해주세요:
     
     메시지: "{message}"
     
@@ -623,14 +643,14 @@ async def parse_multiple_events(message: str):
     모레|수학시험
     
     여러 일정이 있으면 각각 한 줄씩 작성해주세요.
-    일정이 하나만 있으면 빈 문자열을 반환해주세요.
+    일정이 하나만 있거나 기간 일정이면 빈 문자열을 반환해주세요.
     """
     
     try:
         response = await model.ainvoke(prompt)
         result = response.content.strip()
         
-        if not result or "일정이 하나만" in result or "하나의 일정" in result:
+        if not result or "일정이 하나만" in result or "하나의 일정" in result or "기간 일정" in result:
             return None
         
         # 결과 파싱
@@ -660,14 +680,9 @@ async def parse_multiple_events(message: str):
 
 
 async def add_multiple_events(events_data, db: Session):
-    """여러 이벤트를 데이터베이스에 추가"""
+    """여러 이벤트를 데이터베이스에 추가 (개별 이벤트만)"""
     added_events = []
     failed_events = []
-    
-    # 기간 일정인지 확인 (모든 이벤트가 같은 제목이고 연속된 날짜인지)
-    is_period_event = len(events_data) > 1 and all(
-        event['title'] == events_data[0]['title'] for event in events_data
-    )
     
     for event_data in events_data:
         try:
@@ -683,7 +698,7 @@ async def add_multiple_events(events_data, db: Session):
             # Description 생성 (시간 정보 제외)
             description = event_title
             
-            # 이벤트 생성
+            # 이벤트 생성 (단일 날짜)
             new_event = EventModel(
                 event_name=event_title,
                 event_type=event_type,
@@ -696,6 +711,18 @@ async def add_multiple_events(events_data, db: Session):
             
             db.add(new_event)
             
+            # 시간 정보가 있는 경우 응답에 포함
+            if start_time and end_time:
+                if start_time == end_time:
+                    time_str = format_time_for_display(start_time)
+                    added_events.append(f"'{event_title}' 일정이 {event_date} {time_str}에 성공적으로 추가되었습니다!")
+                else:
+                    start_time_str = format_time_for_display(start_time)
+                    end_time_str = format_time_for_display(end_time)
+                    added_events.append(f"'{event_title}' 일정이 {event_date} {start_time_str}부터 {end_time_str}까지 성공적으로 추가되었습니다!")
+            else:
+                added_events.append(f"'{event_title}' 일정이 {event_date}에 성공적으로 추가되었습니다!")
+            
         except Exception as e:
             failed_events.append(f"{event_data.get('title', '알 수 없음')}: {str(e)}")
     
@@ -703,54 +730,9 @@ async def add_multiple_events(events_data, db: Session):
         db.commit()
         
         if failed_events:
-            return f"일부 일정 추가에 실패했습니다.\n실패: {', '.join(failed_events)}"
-        
-        # 성공한 이벤트가 있는 경우
-        if events_data and not failed_events:
-            event_title = events_data[0]['title']
-            
-            # 기간 일정인 경우 통합 메시지
-            if is_period_event and len(events_data) > 1:
-                start_date = min(event['date'] for event in events_data)
-                end_date = max(event['date'] for event in events_data)
-                
-                # 시간 정보가 있는지 확인 (첫 번째 이벤트 기준)
-                first_event = events_data[0]
-                start_time, end_time = await parse_time_period(f"{event_title} {first_event['date']}")
-                
-                if start_time and end_time:
-                    if start_time == end_time:
-                        time_str = format_time_for_display(start_time)
-                        return f"'{event_title}' 일정이 {start_date}부터 {end_date}까지 {time_str}에 성공적으로 추가되었습니다!"
-                    else:
-                        start_time_str = format_time_for_display(start_time)
-                        end_time_str = format_time_for_display(end_time)
-                        return f"'{event_title}' 일정이 {start_date}부터 {end_date}까지 {start_time_str}부터 {end_time_str}까지 성공적으로 추가되었습니다!"
-                else:
-                    return f"'{event_title}' 일정이 {start_date}부터 {end_date}까지 성공적으로 추가되었습니다!"
-            else:
-                # 단일 이벤트 또는 다른 제목의 이벤트들
-                for event_data in events_data:
-                    event_title = event_data['title']
-                    event_date = event_data['date']
-                    
-                    # 시간 파싱
-                    start_time, end_time = await parse_time_period(f"{event_title} {event_date}")
-                    
-                    if start_time and end_time:
-                        if start_time == end_time:
-                            time_str = format_time_for_display(start_time)
-                            added_events.append(f"'{event_title}' 일정이 {event_date} {time_str}에 성공적으로 추가되었습니다!")
-                        else:
-                            start_time_str = format_time_for_display(start_time)
-                            end_time_str = format_time_for_display(end_time)
-                            added_events.append(f"'{event_title}' 일정이 {event_date} {start_time_str}부터 {end_time_str}까지 성공적으로 추가되었습니다!")
-                    else:
-                        added_events.append(f"'{event_title}' 일정이 {event_date}에 성공적으로 추가되었습니다!")
-                
-                return "\n".join(added_events)
-        
-        return "일정이 성공적으로 추가되었습니다!"
+            return f"일부 일정 추가에 실패했습니다.\n성공: {', '.join(added_events)}\n실패: {', '.join(failed_events)}"
+        else:
+            return "\n".join(added_events)
             
     except Exception as e:
         db.rollback()
