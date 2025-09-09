@@ -25,7 +25,7 @@ async def process_ai_query(message: str, db: Session):
         return await handle_grade_query(message, db)
     
     # 이벤트/일정 조회 및 추가
-    elif any(keyword in user_message for keyword in ["일정", "이벤트", "행사", "스케줄", "추가", "등록", "만들어"]):
+    elif any(keyword in user_message for keyword in ["일정", "이벤트", "행사", "스케줄", "추가", "등록", "만들어", "옮겨", "변경", "이동", "바꿔"]):
         return await handle_event_query(message, db)
     
     # 공지사항 조회

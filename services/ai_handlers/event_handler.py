@@ -22,6 +22,10 @@ async def handle_event_query(message: str, db: Session):
     if any(keyword in user_message for keyword in ["추가", "등록", "만들어", "생성"]):
         return await handle_event_add(message, db)
     
+    # 일정 이동/변경 요청
+    if any(keyword in user_message for keyword in ["옮겨", "변경", "이동", "바꿔"]):
+        return await handle_event_move(message, db)
+    
     # 일정 삭제 요청
     if any(keyword in user_message for keyword in ["삭제", "지워", "취소", "제거"]):
         return await handle_event_delete(message, db)
@@ -189,7 +193,23 @@ async def build_ai_response(events, message: str):
     if not events:
         return f"현재 날짜({current_date})에 등록된 일정이 없습니다."
     
-    event_info = [f"{event.event_name} ({event.start_date}, {event.description})" for event in events]
+    event_info = []
+    for event in events:
+        # 시간 정보가 있는지 확인
+        if event.start_time and event.end_time:
+            if event.start_time == event.end_time:
+                # 단일 시간
+                time_str = format_time_for_display(event.start_time)
+                event_info.append(f"{event.event_name} ({event.start_date}, {time_str})")
+            else:
+                # 시간 범위
+                start_time_str = format_time_for_display(event.start_time)
+                end_time_str = format_time_for_display(event.end_time)
+                event_info.append(f"{event.event_name} ({event.start_date}, {start_time_str}-{end_time_str})")
+        else:
+            # 시간 정보 없음
+            event_info.append(f"{event.event_name} ({event.start_date})")
+    
     event_list = "\n".join([f"{i+1}. {info}" for i, info in enumerate(event_info)])
     
     prompt = f"""
@@ -200,7 +220,14 @@ async def build_ai_response(events, message: str):
     {event_list}
     
     사용자가 "{message}"라고 질문했습니다. 
-    현재 날짜를 기준으로 위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
+    위 정보를 바탕으로 간결하고 전문적인 한국어로 답변해주세요.
+    
+    답변 형식:
+    - 이모지 사용 금지
+    - 불필요한 수식어 제거
+    - 날짜별로 간단명료하게 정리
+    - 시간 정보가 있으면 함께 표시
+    - 예시: "9월 9일: 축구대회 (오전9시), 박성주 상담 (오후2시-오후3시)"
     """
     
     response = await model.ainvoke(prompt)
@@ -603,10 +630,24 @@ async def parse_single_date(message: str):
 
 
 async def parse_multiple_events(message: str):
-    """여러 이벤트 파싱 (예: "9월 11일 김민주 상담, 9월 12일 박성주 상담")"""
+    """여러 이벤트 파싱 (기간 일정 제외)"""
+    
+    # 기간 일정 패턴 확인 (같은 제목의 연속 기간)
+    period_patterns = [
+        r'(\d{1,2}월\s*\d{1,2}일)\s*부터\s*(\d{1,2}월\s*\d{1,2}일)\s*까지\s*([^일정추가]+)',
+        r'(\d{1,2}일)\s*부터\s*(\d{1,2}일)\s*까지\s*([^일정추가]+)',
+        r'내일부터\s*모레까지\s*([^일정추가]+)',
+        r'오늘부터\s*(\d{1,2}일)\s*까지\s*([^일정추가]+)'
+    ]
+    
+    # 기간 일정인지 확인
+    for pattern in period_patterns:
+        if re.search(pattern, message):
+            return None  # 기간 일정이면 None 반환 (단일 기간 일정으로 처리)
+    
     # AI를 사용하여 여러 이벤트 파싱
     prompt = f"""
-    다음 메시지에서 여러 개의 일정을 추출해주세요:
+    다음 메시지에서 여러 개의 서로 다른 일정이 있는지 확인해주세요:
     
     메시지: "{message}"
     
@@ -623,14 +664,14 @@ async def parse_multiple_events(message: str):
     모레|수학시험
     
     여러 일정이 있으면 각각 한 줄씩 작성해주세요.
-    일정이 하나만 있으면 빈 문자열을 반환해주세요.
+    일정이 하나만 있거나 기간 일정이면 빈 문자열을 반환해주세요.
     """
     
     try:
         response = await model.ainvoke(prompt)
         result = response.content.strip()
         
-        if not result or "일정이 하나만" in result or "하나의 일정" in result:
+        if not result or "일정이 하나만" in result or "하나의 일정" in result or "기간 일정" in result:
             return None
         
         # 결과 파싱
@@ -660,14 +701,9 @@ async def parse_multiple_events(message: str):
 
 
 async def add_multiple_events(events_data, db: Session):
-    """여러 이벤트를 데이터베이스에 추가"""
+    """여러 이벤트를 데이터베이스에 추가 (개별 이벤트만)"""
     added_events = []
     failed_events = []
-    
-    # 기간 일정인지 확인 (모든 이벤트가 같은 제목이고 연속된 날짜인지)
-    is_period_event = len(events_data) > 1 and all(
-        event['title'] == events_data[0]['title'] for event in events_data
-    )
     
     for event_data in events_data:
         try:
@@ -683,7 +719,7 @@ async def add_multiple_events(events_data, db: Session):
             # Description 생성 (시간 정보 제외)
             description = event_title
             
-            # 이벤트 생성
+            # 이벤트 생성 (단일 날짜)
             new_event = EventModel(
                 event_name=event_title,
                 event_type=event_type,
@@ -696,6 +732,18 @@ async def add_multiple_events(events_data, db: Session):
             
             db.add(new_event)
             
+            # 시간 정보가 있는 경우 응답에 포함
+            if start_time and end_time:
+                if start_time == end_time:
+                    time_str = format_time_for_display(start_time)
+                    added_events.append(f"'{event_title}' 일정이 {event_date} {time_str}에 성공적으로 추가되었습니다!")
+                else:
+                    start_time_str = format_time_for_display(start_time)
+                    end_time_str = format_time_for_display(end_time)
+                    added_events.append(f"'{event_title}' 일정이 {event_date} {start_time_str}부터 {end_time_str}까지 성공적으로 추가되었습니다!")
+            else:
+                added_events.append(f"'{event_title}' 일정이 {event_date}에 성공적으로 추가되었습니다!")
+            
         except Exception as e:
             failed_events.append(f"{event_data.get('title', '알 수 없음')}: {str(e)}")
     
@@ -703,54 +751,9 @@ async def add_multiple_events(events_data, db: Session):
         db.commit()
         
         if failed_events:
-            return f"일부 일정 추가에 실패했습니다.\n실패: {', '.join(failed_events)}"
-        
-        # 성공한 이벤트가 있는 경우
-        if events_data and not failed_events:
-            event_title = events_data[0]['title']
-            
-            # 기간 일정인 경우 통합 메시지
-            if is_period_event and len(events_data) > 1:
-                start_date = min(event['date'] for event in events_data)
-                end_date = max(event['date'] for event in events_data)
-                
-                # 시간 정보가 있는지 확인 (첫 번째 이벤트 기준)
-                first_event = events_data[0]
-                start_time, end_time = await parse_time_period(f"{event_title} {first_event['date']}")
-                
-                if start_time and end_time:
-                    if start_time == end_time:
-                        time_str = format_time_for_display(start_time)
-                        return f"'{event_title}' 일정이 {start_date}부터 {end_date}까지 {time_str}에 성공적으로 추가되었습니다!"
-                    else:
-                        start_time_str = format_time_for_display(start_time)
-                        end_time_str = format_time_for_display(end_time)
-                        return f"'{event_title}' 일정이 {start_date}부터 {end_date}까지 {start_time_str}부터 {end_time_str}까지 성공적으로 추가되었습니다!"
-                else:
-                    return f"'{event_title}' 일정이 {start_date}부터 {end_date}까지 성공적으로 추가되었습니다!"
-            else:
-                # 단일 이벤트 또는 다른 제목의 이벤트들
-                for event_data in events_data:
-                    event_title = event_data['title']
-                    event_date = event_data['date']
-                    
-                    # 시간 파싱
-                    start_time, end_time = await parse_time_period(f"{event_title} {event_date}")
-                    
-                    if start_time and end_time:
-                        if start_time == end_time:
-                            time_str = format_time_for_display(start_time)
-                            added_events.append(f"'{event_title}' 일정이 {event_date} {time_str}에 성공적으로 추가되었습니다!")
-                        else:
-                            start_time_str = format_time_for_display(start_time)
-                            end_time_str = format_time_for_display(end_time)
-                            added_events.append(f"'{event_title}' 일정이 {event_date} {start_time_str}부터 {end_time_str}까지 성공적으로 추가되었습니다!")
-                    else:
-                        added_events.append(f"'{event_title}' 일정이 {event_date}에 성공적으로 추가되었습니다!")
-                
-                return "\n".join(added_events)
-        
-        return "일정이 성공적으로 추가되었습니다!"
+            return f"일부 일정 추가에 실패했습니다.\n성공: {', '.join(added_events)}\n실패: {', '.join(failed_events)}"
+        else:
+            return "\n".join(added_events)
             
     except Exception as e:
         db.rollback()
@@ -829,3 +832,152 @@ def format_time_for_display(time_obj):
         return f"{period}{display_hour}시"
     else:
         return f"{period}{display_hour}시{minute}분"
+
+
+def normalize_text(text):
+    """띄어쓰기와 특수문자를 제거하여 텍스트 정규화"""
+    if not text:
+        return ""
+    return re.sub(r'[\s\-_\.]', '', text)
+
+
+async def parse_event_move_info(message: str):
+    """일정 이동 정보 파싱"""
+    prompt = f"""
+    다음 메시지에서 일정 이동 정보를 추출해주세요:
+    "{message}"
+    
+    추출할 정보:
+    1. 기존 날짜 (예: "12일", "9월 10일", "내일")
+    2. 일정명 (예: "박성주상담", "수학시험")
+    3. 새 날짜 (예: "14일", "9월 15일", "모레")
+    
+    응답 형식:
+    기존날짜: [기존 날짜]
+    일정명: [일정명]
+    새날짜: [새 날짜]
+    
+    정보를 찾을 수 없으면 "없음"으로 표시해주세요.
+    """
+    
+    response = await model.ainvoke(prompt)
+    content = response.content
+    
+    # 파싱 결과 추출
+    old_date = None
+    event_name = None
+    new_date = None
+    
+    for line in content.split('\n'):
+        if '기존날짜:' in line:
+            old_date = line.split('기존날짜:')[1].strip()
+        elif '일정명:' in line:
+            event_name = line.split('일정명:')[1].strip()
+        elif '새날짜:' in line:
+            new_date = line.split('새날짜:')[1].strip()
+    
+    return old_date, event_name, new_date
+
+
+async def parse_date_from_text(date_text: str):
+    """텍스트에서 날짜 파싱"""
+    if not date_text or date_text == "없음":
+        return None
+    
+    current_date = datetime.now()
+    
+    # 상대적 날짜 처리
+    if "내일" in date_text:
+        return (current_date + timedelta(days=1)).strftime('%Y-%m-%d')
+    elif "모레" in date_text:
+        return (current_date + timedelta(days=2)).strftime('%Y-%m-%d')
+    elif "어제" in date_text:
+        return (current_date - timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    # 숫자만 있는 경우 (예: "12일")
+    if re.match(r'^\d+일$', date_text):
+        day = int(date_text.replace('일', ''))
+        return current_date.replace(day=day).strftime('%Y-%m-%d')
+    
+    # 월일 형식 (예: "9월 10일")
+    month_day_match = re.search(r'(\d+)월\s*(\d+)일', date_text)
+    if month_day_match:
+        month = int(month_day_match.group(1))
+        day = int(month_day_match.group(2))
+        return current_date.replace(month=month, day=day).strftime('%Y-%m-%d')
+    
+    # YYYY-MM-DD 형식
+    if re.match(r'\d{4}-\d{2}-\d{2}', date_text):
+        return date_text
+    
+    return None
+
+
+async def handle_event_move(message: str, db: Session):
+    """일정 이동 처리"""
+    try:
+        # 일정 이동 정보 파싱
+        old_date_text, event_name, new_date_text = await parse_event_move_info(message)
+        
+        if not event_name or event_name == "없음":
+            return "어떤 일정을 이동시키시겠어요? (예: 12일 박성주상담을 14일로 옮겨줘)"
+        
+        if not old_date_text or old_date_text == "없음":
+            return "기존 날짜를 알려주세요. (예: 12일 박성주상담을 14일로 옮겨줘)"
+        
+        if not new_date_text or new_date_text == "없음":
+            return "새 날짜를 알려주세요. (예: 12일 박성주상담을 14일로 옮겨줘)"
+        
+        # 날짜 파싱
+        old_date = await parse_date_from_text(old_date_text)
+        new_date = await parse_date_from_text(new_date_text)
+        
+        if not old_date:
+            return f"기존 날짜 '{old_date_text}'를 이해할 수 없습니다."
+        
+        if not new_date:
+            return f"새 날짜 '{new_date_text}'를 이해할 수 없습니다."
+        
+        # 일정 검색 (띄어쓰기 제거 후 비교)
+        normalized_event_name = normalize_text(event_name)
+        events = db.query(EventModel).filter(
+            EventModel.start_date == old_date
+        ).all()
+        
+        target_event = None
+        for event in events:
+            if normalize_text(event.event_name) == normalized_event_name:
+                target_event = event
+                break
+        
+        if not target_event:
+            return f"'{event_name}' 일정을 {old_date}에서 찾을 수 없습니다."
+        
+        # 일정 이동 (날짜 업데이트)
+        old_start_date = target_event.start_date
+        old_end_date = target_event.end_date
+        
+        # 기간 일정인 경우 기간 유지
+        if old_end_date and old_end_date != old_start_date:
+            duration = (old_end_date - old_start_date).days
+            new_start_date = datetime.strptime(new_date, '%Y-%m-%d').date()
+            new_end_date = new_start_date + timedelta(days=duration)
+        else:
+            new_start_date = datetime.strptime(new_date, '%Y-%m-%d').date()
+            new_end_date = new_start_date
+        
+        target_event.start_date = new_start_date
+        target_event.end_date = new_end_date
+        
+        db.commit()
+        db.refresh(target_event)
+        
+        # 성공 메시지 생성
+        if new_start_date == new_end_date:
+            return f"'{event_name}' 일정이 {new_date}로 성공적으로 이동되었습니다!"
+        else:
+            return f"'{event_name}' 일정이 {new_date}부터 {new_end_date}까지로 성공적으로 이동되었습니다!"
+        
+    except Exception as e:
+        db.rollback()
+        return f"일정 이동 중 오류가 발생했습니다: {str(e)}"
