@@ -1,6 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pymilvus import connections  # ✅ Milvus 연결용
+from pymilvus import connections
+import logging
+
+# HTTP 라이브러리 디버그 로그 비활성화
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 # ✅ 미들웨어 임포트
 from middlewares.timing import TimingMiddleware

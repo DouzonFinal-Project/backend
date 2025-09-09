@@ -3,11 +3,12 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from database.db import SessionLocal
 from models.meetings import Meeting as MeetingModel  # ✅ 모델 import
+from models.students import Student as StudentModel 
 
 # ==========================================================
 # [설정] CSV 파일 경로
 # ==========================================================
-CSV_PATH = "data/meetings.csv"  # ✅ meetings.csv 파일 경로
+CSV_PATH = "data/meetings.csv"  # ⚠️ 경로 확인 후 맞게 수정하세요
 
 
 # ==========================================================
@@ -24,6 +25,13 @@ def migrate_meetings():
                 student_id = (
                     int(float(row["student_id"])) if row["student_id"].strip() else None
                 )
+
+                # ✅ FK 검증: student_id가 DB에 존재하는지 확인
+                if student_id:
+                    exists = db.query(StudentModel).filter_by(id=student_id).first()
+                    if not exists:
+                        print(f"⚠️ 학생 ID {student_id} 없음 → 건너뜀 (row ID: {row['id']})")
+                        continue
 
                 # ✅ teacher_id: 필수 값
                 if not row["teacher_id"].strip():
@@ -64,7 +72,7 @@ def migrate_meetings():
                 db.add(meeting)
 
             except Exception as e:
-                print(f"❌ 오류 발생 (ID: {row.get('id')}): {e}")
+                print(f"❌ 오류 발생 (row ID: {row.get('id')}): {e}")
                 continue
 
     db.commit()
