@@ -38,7 +38,10 @@ def create_event(event: EventSchema, db: Session = Depends(get_db)):
             "id": db_event.id,
             "event_name": db_event.event_name,
             "event_type": db_event.event_type,
-            "date": str(db_event.date),
+            "start_date": str(db_event.start_date),
+            "end_date": str(db_event.end_date) if db_event.end_date else None,
+            "start_time": str(db_event.start_time) if db_event.start_time else None,
+            "end_time": str(db_event.end_time) if db_event.end_time else None,
             "description": db_event.description,
             "message": "Event created successfully"
         }
@@ -53,7 +56,16 @@ def read_events(db: Session = Depends(get_db)):
     return {
         "success": True,
         "data": [
-            {"id": r.id, "event_name": r.event_name, "event_type": r.event_type, "date": str(r.date), "description": r.description}
+            {
+                "id": r.id, 
+                "event_name": r.event_name, 
+                "event_type": r.event_type, 
+                "start_date": str(r.start_date), 
+                "end_date": str(r.end_date) if r.end_date else None,
+                "start_time": str(r.start_time) if r.start_time else None,
+                "end_time": str(r.end_time) if r.end_time else None,
+                "description": r.description
+            }
             for r in records
         ]
     }
@@ -69,14 +81,23 @@ def read_events(db: Session = Depends(get_db)):
 def get_monthly_events(year: int, month: int, db: Session = Depends(get_db)):
     events = (
         db.query(EventModel)
-        .filter(func.year(EventModel.date) == year)
-        .filter(func.month(EventModel.date) == month)
+        .filter(func.year(EventModel.start_date) == year)
+        .filter(func.month(EventModel.start_date) == month)
         .all()
     )
     return {
         "success": True,
         "data": [
-            {"id": e.id, "event_name": e.event_name, "event_type": e.event_type, "date": str(e.date), "description": e.description}
+            {
+                "id": e.id, 
+                "event_name": e.event_name, 
+                "event_type": e.event_type, 
+                "start_date": str(e.start_date), 
+                "end_date": str(e.end_date) if e.end_date else None,
+                "start_time": str(e.start_time) if e.start_time else None,
+                "end_time": str(e.end_time) if e.end_time else None,
+                "description": e.description
+            }
             for e in events
         ]
     }
@@ -88,13 +109,22 @@ def get_monthly_events(year: int, month: int, db: Session = Depends(get_db)):
 def get_weekly_events(start_date: str, end_date: str, db: Session = Depends(get_db)):
     events = (
         db.query(EventModel)
-        .filter(EventModel.date.between(start_date, end_date))
+        .filter(EventModel.start_date.between(start_date, end_date))
         .all()
     )
     return {
         "success": True,
         "data": [
-            {"id": e.id, "event_name": e.event_name, "event_type": e.event_type, "date": str(e.date), "description": e.description}
+            {
+                "id": e.id, 
+                "event_name": e.event_name, 
+                "event_type": e.event_type, 
+                "start_date": str(e.start_date), 
+                "end_date": str(e.end_date) if e.end_date else None,
+                "start_time": str(e.start_time) if e.start_time else None,
+                "end_time": str(e.end_time) if e.end_time else None,
+                "description": e.description
+            }
             for e in events
         ]
     }
@@ -114,8 +144,12 @@ def read_event(event_id: int, db: Session = Depends(get_db)):
         "success": True,
         "data": {
             "id": event.id,
-            "title": event.title,
-            "date": str(event.date),
+            "event_name": event.event_name,
+            "event_type": event.event_type,
+            "start_date": str(event.start_date),
+            "end_date": str(event.end_date) if event.end_date else None,
+            "start_time": str(event.start_time) if event.start_time else None,
+            "end_time": str(event.end_time) if event.end_time else None,
             "description": event.description
         }
     }
@@ -144,7 +178,10 @@ def update_event(event_id: int, updated: EventSchema, db: Session = Depends(get_
             "id": event.id,
             "event_name": event.event_name,
             "event_type": event.event_type,
-            "date": str(event.date),
+            "start_date": str(event.start_date),
+            "end_date": str(event.end_date) if event.end_date else None,
+            "start_time": str(event.start_time) if event.start_time else None,
+            "end_time": str(event.end_time) if event.end_time else None,
             "description": event.description,
             "message": "Event updated successfully"
         }
