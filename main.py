@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pymilvus import connections
+from models import *
 import logging
 
 # HTTP 라이브러리 디버그 로그 비활성화

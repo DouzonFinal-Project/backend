@@ -25,3 +25,7 @@ class Meeting(Base):
 
     # ✅ 관계 설정: 교사 객체와의 ORM 관계
     teacher = relationship(TeacherModel, backref="meetings", lazy="joined")
+
+    # ✅ 관계 설정: Report ↔ Meeting (1:N)
+    # Report 클래스를 직접 import하지 않고 문자열로 참조 → 순환 참조 문제 방지
+    reports = relationship("Report", back_populates="meeting", cascade="all, delete-orphan")
