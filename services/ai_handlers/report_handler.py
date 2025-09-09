@@ -2,20 +2,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
 import re
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from config.settings import settings
 
-# Models
-from models.grades import Grade as GradeModel
-from models.attendance import Attendance as AttendanceModel
-from models.meetings import Meeting as MeetingModel
-from models.notices import Notice as NoticeModel
-from models.events import Event as EventModel
-# 상담 기록 모델 있으면 import 필요 (예: CounselingRecordModel)
-
-# ✅ Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
 
 def handle_report_query(message: str, db: Session):
@@ -174,5 +169,5 @@ def build_ai_report(title: str, grades, attendance, notices, events, message: st
     {meeting_info}
     """
 
-    response = model.generate_content(prompt)
-    return response.text
+    response = model.invoke(prompt)
+    return response.content

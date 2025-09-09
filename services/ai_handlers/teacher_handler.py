@@ -1,13 +1,16 @@
 from sqlalchemy.orm import Session
 from models.teachers import Teacher as TeacherModel
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from config.settings import settings
 
-# Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
-def handle_teacher_query(message: str, db: Session):
+async def handle_teacher_query(message: str, db: Session):
     """교사 명단 조회 처리"""
     # 교사 데이터 조회
     teachers = db.query(TeacherModel).all()
@@ -33,6 +36,6 @@ def handle_teacher_query(message: str, db: Session):
     """
     
     # Gemini API 호출
-    response = model.generate_content(prompt)
+    response = await model.ainvoke(prompt)
     
-    return response.text 
+    return response.content 

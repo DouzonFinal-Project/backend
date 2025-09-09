@@ -1,0 +1,121 @@
+Project TeacherAssistant {
+  database_type: 'MySQL'
+  Note: '초등 교사 행정지원 프로젝트 전체 ERD (발표용)'
+}
+
+
+
+Table students {
+  id int [pk]
+  student_name varchar
+  class_id int [ref: > classes.id]
+  gender varchar
+  phone varchar
+  address varchar
+}
+
+Table teachers {
+  id int [pk]
+  name varchar
+  email varchar [unique]
+  phone varchar
+  subject varchar
+  role varchar
+  is_homeroom boolean
+  homeroom_class varchar
+  class_id int [ref: > classes.id]
+}
+
+Table classes {
+  id int [pk]
+  grade int
+  class_num int
+  teacher_id int [ref: > teachers.id]
+}
+
+Table subjects {
+  id int [pk]
+  name varchar
+  category varchar
+}
+
+Table grades {
+  id int [pk]
+  student_id int [ref: > students.id]
+  subject_id int [ref: > subjects.id]
+  term int
+  average_score float
+  grade_letter varchar
+}
+
+Table tests {
+  id int [pk]
+  subject_id int [ref: > subjects.id]
+  test_name varchar
+  test_date date
+  class_id int [ref: > classes.id]
+  subject_name varchar
+}
+
+Table test_scores {
+  id int [pk]
+  test_id int [ref: > tests.id]
+  student_id int [ref: > students.id]
+  score float
+  subject_name varchar
+}
+
+Table attendance {
+  id int [pk]
+  student_id int [ref: > students.id]
+  date date
+  status varchar
+  reason varchar
+}
+
+Table events {
+  id int [pk]
+  event_name varchar
+  event_type varchar
+  date date
+  description varchar
+}
+
+Table notices {
+  id int [pk]
+  title varchar
+  content varchar
+  target_class_id int [ref: > classes.id]
+  date date
+}
+
+Table meetings {
+  id int [pk]
+  title varchar
+  meeting_type varchar
+  student_id int [ref: > students.id]
+  teacher_id int [ref: > teachers.id]
+}
+
+Table reports {
+  id int [pk]
+  student_id int [ref: > students.id]
+  date date
+  type varchar
+  content_raw varchar
+  summary varchar
+  emotion varchar
+}
+
+Table school_report {
+  id int [pk]
+  year int
+  semester int
+  student_id int [ref: > students.id]
+  behavior_summary varchar
+  peer_relation varchar
+  career_aspiration varchar
+  teacher_feedback varchar
+}
+
+

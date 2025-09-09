@@ -1,108 +1,83 @@
 from sqlalchemy.orm import Session
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from config.settings import settings
 from models.attendance import Attendance as AttendanceModel
+from models.students import Student as StudentModel
 from sqlalchemy import func
 from datetime import datetime, timedelta
 import re
 
-# ✅ Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# ✅ LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
 
-def handle_attendance_query(message: str, db: Session):
+async def handle_attendance_query(message: str, db: Session):
     """
     출결 관련 질의 처리
-    - "이번 주 출석 상황"
-    - "이번 달 철수 출석률"
-    - "3반 출석 요약"
+    - "이번주 결석한 학생 알려줘"
     """
     user_message = message.lower()
 
-    # 이번 주 출석
-    if "이번주" in user_message or "이번 주" in user_message:
+    # 이번 주 결석 학생 조회
+    if ("이번주" in user_message or "이번 주" in user_message) and ("결석" in user_message):
+        return await weekly_absent_students(message, db)
+
+    # 기본 응답
+    return "죄송합니다. 현재는 '이번주 결석한 학생 알려줘' 기능만 지원합니다."
+
+
+async def weekly_absent_students(message: str, db: Session):
+    """이번 주 결석한 학생 조회"""
+    try:
+        # 이번 주 날짜 범위 계산
         today = datetime.now().date()
         start = today - timedelta(days=today.weekday())  # 월요일
         end = start + timedelta(days=6)                  # 일요일
-        return weekly_summary(db, start, end, message)
-
-    # 이번 달 출석
-    if "이번달" in user_message or "이번 달" in user_message:
-        year, month = datetime.now().year, datetime.now().month
-        return monthly_summary(db, year, month, message)
-
-    # 특정 학생 출석
-    student_match = re.search(r'(\d+)번|(\w+) 학생', message)
-    if student_match:
-        # 여기서는 단순화해서 student_id 추출했다고 가정
-        student_id = int(student_match.group(1)) if student_match.group(1) else None
-        if student_id:
-            return student_summary(db, student_id, message)
-
-    # 특정 반 출석
-    class_match = re.search(r'(\d+)반', message)
-    if class_match:
-        class_id = int(class_match.group(1))
-        return class_summary(db, class_id, message)
-
-    return "출석 관련 요청을 이해하지 못했습니다. 예: '이번주 3반 출석 알려줘'"
-
-
-def weekly_summary(db: Session, start, end, message: str):
-    records = (
-        db.query(AttendanceModel)
-        .filter(AttendanceModel.date.between(start, end))
-        .all()
-    )
-    return build_ai_response(records, message)
-
-
-def monthly_summary(db: Session, year: int, month: int, message: str):
-    records = (
-        db.query(AttendanceModel)
-        .filter(func.year(AttendanceModel.date) == year)
-        .filter(func.month(AttendanceModel.date) == month)
-        .all()
-    )
-    return build_ai_response(records, message)
-
-
-def student_summary(db: Session, student_id: int, message: str):
-    records = (
-        db.query(AttendanceModel)
-        .filter(AttendanceModel.student_id == student_id)
-        .all()
-    )
-    return build_ai_response(records, message)
-
-
-def class_summary(db: Session, class_id: int, message: str):
-    records = (
-        db.query(AttendanceModel)
-        .filter(AttendanceModel.class_id == class_id)
-        .all()
-    )
-    return build_ai_response(records, message)
-
-
-def build_ai_response(records, message: str):
-    if not records:
-        return "❌ 해당 조건에 맞는 출석 기록이 없습니다."
-
-    record_info = [
-        f"{r.date} - 학생 {r.student_id}: {r.status}" for r in records
-    ]
-    record_list = "\n".join(record_info)
-
-    prompt = f"""
-    다음은 출석 기록입니다:
-
-    {record_list}
-
-    사용자가 "{message}" 라고 물었습니다.
-    위 정보를 바탕으로 한국어로 자연스럽게 요약하여 답변해 주세요.
-    """
-
-    response = model.generate_content(prompt)
-    return response.text
+        
+        # 결석한 학생 조회
+        absent_students = (
+            db.query(StudentModel, AttendanceModel)
+            .join(AttendanceModel, StudentModel.id == AttendanceModel.student_id)
+            .filter(
+                AttendanceModel.date.between(start, end),
+                AttendanceModel.status == '결석'
+            )
+            .all()
+        )
+        
+        if not absent_students:
+            return "이번 주에는 결석한 학생이 없습니다. 모든 학생이 출석했습니다! 👍"
+        
+        # 결석 학생 목록 생성
+        absent_list = []
+        for student, attendance in absent_students:
+            reason_text = f" - {attendance.reason}" if attendance.reason else " - 사유 미기재"
+            absent_list.append(f"{student.student_name} ({attendance.date}){reason_text}")
+        
+        # AI에게 전문가 챗봇 스타일 응답 생성 요청
+        prompt = f"""
+        다음은 이번 주 결석한 학생 목록입니다:
+        {chr(10).join(absent_list)}
+        
+        전문가 챗봇처럼 깔끔하고 체계적으로 답변해주세요.
+        제목은 ****제목**** 형태로 감싸서 작성해주세요:
+        
+        ****이번 주 출결 현황****
+        결석 학생: X명
+        주요 사유: 사유1, 사유2
+        
+        ****결석 학생 상세****
+        • 학생명 (날짜) - 사유
+        
+        간결하고 전문적으로 작성해주세요.
+        """
+        
+        response = await model.ainvoke(prompt)
+        return response.content
+        
+    except Exception as e:
+        return f"결석 학생 조회 중 오류가 발생했습니다: {str(e)}"

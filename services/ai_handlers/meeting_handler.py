@@ -1,11 +1,14 @@
 from sqlalchemy.orm import Session
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from config.settings import settings
 from models.meetings import Meeting as MeetingModel
 
-# ✅ Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
 
 def handle_meeting_query(message: str, db: Session):
@@ -46,8 +49,8 @@ def summarize_meeting(content: str) -> str:
     ---
     위 내용을 한국어로 5줄 이내로 간결하게 요약해 주세요.
     """
-    response = model.generate_content(prompt)
-    return f"📝 회의 요약:\n{response.text}"
+    response = model.invoke(prompt)
+    return f"📝 회의 요약:\n{response.content}"
 
 
 def extract_actions(content: str) -> str:
@@ -59,5 +62,5 @@ def extract_actions(content: str) -> str:
     ---
     이 회의에서 나온 '실행해야 할 액션 아이템(To-Do)'만 항목별로 추출해서 목록 형태로 정리해 주세요.
     """
-    response = model.generate_content(prompt)
-    return f"✅ 액션 아이템:\n{response.text}"
+    response = model.invoke(prompt)
+    return f"✅ 액션 아이템:\n{response.content}"

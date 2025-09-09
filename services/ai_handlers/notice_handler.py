@@ -1,17 +1,22 @@
 from sqlalchemy.orm import Session
 from models.notices import Notice as NoticeModel
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from sqlalchemy import func
 from config.settings import settings
 from datetime import datetime, timedelta
 import re
 
-# Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
 
-def handle_notice_query(message: str, db: Session):
+
+async def handle_notice_query(message: str, db: Session):
+
     """공지사항 조회 및 관리 처리"""
     user_message = message.lower()
     
@@ -20,33 +25,39 @@ def handle_notice_query(message: str, db: Session):
         today = datetime.now().date()
         start = today - timedelta(days=today.weekday())  # 월요일
         end = start + timedelta(days=6)                  # 일요일
-        return handle_notice_weekly(start, end, message, db)
+
+        return await handle_notice_weekly(start, end, message, db)
+
     
     # 지난주 공지사항 조회
     if "지난주" in user_message or "지난 주" in user_message:
         today = datetime.now().date()
         start = today - timedelta(days=today.weekday() + 7)  # 지난주 월요일
         end = start + timedelta(days=6)                      # 지난주 일요일
-        return handle_notice_weekly(start, end, message, db)
+
+        return await handle_notice_weekly(start, end, message, db)
+
     
     # 오늘 공지사항 조회
     if "오늘" in user_message and any(keyword in user_message for keyword in ["공지", "공지사항"]):
         today = datetime.now().date()
-        return handle_notice_daily(today, message, db)
+
+        return await handle_notice_daily(today, message, db)
     
     # 중요 공지사항 조회
     if any(keyword in user_message for keyword in ["중요", "긴급", "필수"]):
-        return handle_important_notices(message, db)
+        return await handle_important_notices(message, db)
     
     # 전체 공지사항 조회
     if any(keyword in user_message for keyword in ["전체", "모든", "목록"]):
-        return handle_notice_list(message, db)
+        return await handle_notice_list(message, db)
     
     # 기본: 최근 공지사항 조회
-    return handle_recent_notices(message, db)
+    return await handle_recent_notices(message, db)
 
 
-def handle_notice_daily(date, message: str, db: Session):
+async def handle_notice_daily(date, message: str, db: Session):
+
     """일일 공지사항 조회"""
     current_date = datetime.now().strftime('%Y년 %m월 %d일')
     
@@ -72,15 +83,19 @@ def handle_notice_daily(date, message: str, db: Session):
         else:
             return f"현재 날짜({current_date})에 등록된 공지사항이 없습니다."
     
-    return build_notice_response(notices, message)
+
+    return await build_notice_response(notices, message)
 
 
-def handle_important_notices(message: str, db: Session):
+async def handle_important_notices(message: str, db: Session):
+
+
     """중요 공지사항 조회 (기능 제거됨)"""
     return "죄송합니다. 현재 중요 공지사항 구분 기능은 지원하지 않습니다. 전체 공지사항을 조회해드릴까요?"
 
 
-def handle_notice_list(message: str, db: Session):
+async def handle_notice_list(message: str, db: Session):
+
     """전체 공지사항 조회"""
     notices = (
         db.query(NoticeModel)
@@ -89,10 +104,11 @@ def handle_notice_list(message: str, db: Session):
         .all()
     )
     
-    return build_notice_response(notices, message)
+    return await build_notice_response(notices, message)
 
 
-def handle_notice_weekly(start, end, message: str, db: Session):
+async def handle_notice_weekly(start, end, message: str, db: Session):
+
     """주간 공지사항 조회"""
     notices = (
         db.query(NoticeModel)
@@ -101,10 +117,11 @@ def handle_notice_weekly(start, end, message: str, db: Session):
         .all()
     )
     
-    return build_notice_response_with_summary(notices, message, start, end)
+    return await build_notice_response_with_summary(notices, message, start, end)
 
 
-def handle_recent_notices(message: str, db: Session):
+async def handle_recent_notices(message: str, db: Session):
+
     """최근 공지사항 조회"""
     notices = (
         db.query(NoticeModel)
@@ -113,10 +130,12 @@ def handle_recent_notices(message: str, db: Session):
         .all()
     )
     
-    return build_notice_response(notices, message)
+
+    return await build_notice_response(notices, message)
 
 
-def build_notice_response(notices, message: str):
+async def build_notice_response(notices, message: str):
+
     """AI 응답 생성 (공지사항)"""
     current_date = datetime.now().strftime('%Y년 %m월 %d일')
     
@@ -137,14 +156,23 @@ def build_notice_response(notices, message: str):
     {notice_list}
     
     사용자가 "{message}"라고 질문했습니다. 
-    현재 날짜를 기준으로 위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
+    
+    다음 지침에 따라 답변해주세요:
+    1. 별표(*) 기호를 사용하지 마세요
+    2. 간결하고 전문적인 톤으로 답변하세요
+    3. 존댓말을 사용하되 자연스럽게 하세요
+    4. 핵심 정보에 집중하고 체계적으로 정리해주세요
+    5. 불필요한 반복을 피하고 명확하게 설명해주세요
+    6. 이모지나 과도한 친근함 표현을 자제해주세요
+    7. 미래 일정은 '예정되어 있습니다' 또는 '있습니다'로 통일해서 표현해주세요
     """
     
-    response = model.generate_content(prompt)
-    return response.text
+
+    response = await model.ainvoke(prompt)
+    return response.content
 
 
-def build_notice_response_with_summary(notices, message: str, start_date, end_date):
+async def build_notice_response_with_summary(notices, message: str, start_date, end_date):
     """AI 응답 생성 (공지사항 + 내용 요약)"""
     current_date = datetime.now().strftime('%Y년 %m월 %d일')
     period = f"{start_date.strftime('%m월 %d일')} ~ {end_date.strftime('%m월 %d일')}"
@@ -180,9 +208,19 @@ def build_notice_response_with_summary(notices, message: str, start_date, end_da
     {summary_text}
     
     사용자가 "{message}"라고 질문했습니다. 
-    위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
-    날짜별로 정리해서 보기 쉽게 설명해주세요.
+    
+    다음 지침에 따라 답변해주세요:
+    1. 별표(*) 기호를 사용하지 마세요
+    2. 간결하고 전문적인 톤으로 답변하세요
+    3. 존댓말을 사용하되 자연스럽게 하세요
+    4. 날짜별로 체계적으로 정리해주세요
+    5. 불필요한 반복을 피하고 명확하게 설명해주세요
+    6. 이모지나 과도한 친근함 표현을 자제해주세요
+    7. 미래 일정은 '예정되어 있습니다' 또는 '있습니다'로 통일해서 표현해주세요
     """
     
-    response = model.generate_content(prompt)
-    return response.text
+    response = await model.ainvoke(prompt)
+
+    return response.content
+
+

@@ -3,14 +3,17 @@ from models.students import Student as StudentModel
 from models.grades import Grade as GradeModel
 from models.test_scores import TestScore as TestScoreModel
 from models.subjects import Subject as SubjectModel
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from config.settings import settings
 
-# Gemini API 설정
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.GEMINI_MODEL)
+# LangChain Gemini API 설정
+model = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    google_api_key=settings.GEMINI_API_KEY,
+    temperature=0.7
+)
 
-def handle_grade_query(message: str, db: Session):
+async def handle_grade_query(message: str, db: Session):
     """성적 조회 처리"""
     # 학생 이름 추출 (간단한 방식)
     student_name = None
@@ -67,6 +70,6 @@ def handle_grade_query(message: str, db: Session):
     """
     
     # Gemini API 호출
-    response = model.generate_content(prompt)
+    response = await model.ainvoke(prompt)
     
-    return response.text 
+    return response.content 
