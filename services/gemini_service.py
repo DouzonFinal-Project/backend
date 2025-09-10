@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 import itertools
 import json
 from typing import List, Dict, Any, Optional, AsyncGenerator
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import (
@@ -209,8 +209,6 @@ Don't introduce yourself and say hello unless the user asks you to.
 {user_query}
 
 위의 {"관련 상담 기록을 참고하여" if search_results else "교육학적 지식을 바탕으로"}, 다음과 같이 답변을 제공해주세요:
-
-{search_results}의 내용과 맥락을 파악하고 학생을 위한 답변 제공을 해주세요
 
 전문적이면서도 실무에서 바로 적용할 수 있는 조언을 부탁드립니다.
 (응답 길이: 1000자 이내)"""
@@ -424,71 +422,206 @@ Don't introduce yourself and say hello unless the user asks you to.
                 "timestamp": datetime.now().isoformat()
             }
 
-    async def generate_counseling_plan(self, student_info: Dict[str, Any]) -> Dict[str, Any]:
-        """학생 정보 기반 개별 상담 계획 수립"""
+    async def generate_counseling_plan(
+        self, 
+        student_info: Dict[str, Any],
+        search_results: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """
+        학생 정보와 RAG 검색결과를 기반으로 개별 상담 계획 수립
+        
+        Args:
+            student_info: 학생 기본정보 (이름, 학년, 주요 관심사항 등)
+            search_results: RAG 검색으로 찾은 과거 유사 상담 기록들
+        """
         async def _generate_plan():
-            plan_prompt = f"""
-당신은 전문적인 초등학교 상담 교사 보조입니다. 제공된 학생 정보를 면밀히 분석하여, 해당 학생에게 가장 적합하고 실현 가능한 맞춤형 개별 상담 계획을 체계적으로 수립해주세요.
-
-학생 정보:
-{json.dumps(student_info, ensure_ascii=False, indent=2)}
-
-다음 Markdown 형식에 맞춰 모든 항목을 구체적으로 작성해주세요. 불필요한 서론이나 추가 설명은 제외하고, 내용만 채워주세요.
-
-## 📝 개별 상담 계획서 (OOO 학생)
-
-### 1. 학생 현황 분석
-- 주요 강점: 학생의 흥미, 재능 등 긍정적 특성을 구체적으로 서술하세요.
-- 개선이 필요한 영역: 학생의 어려움, 문제 행동, 학습 습관 등 개선이 필요한 부분을 초등학생의 발달 특성을 고려해 작성하세요.
-- 관찰 포인트: 상담자가 학생을 더 잘 이해하기 위해 집중적으로 관찰해야 할 행동이나 상황을 구체적으로 제시하세요.
-
-### 2. 상담 목표
-- 단기 목표 (1개월): 1개월 내에 달성할 수 있는 작고 구체적인 행동 목표를 1~2개 제시하세요. (예: "수업 중 5분 집중하는 연습을 한다.")
-- 중기 목표 (1학기): 단기 목표를 확장하여 1학기 동안 달성할 목표를 제시하세요.
-- 장기 목표 (1년): 학생의 긍정적 성장과 건강한 학교생활을 위한 궁극적인 목표를 제시하세요.
-
-### 3. 상담 전략
-- 접근 방법: 학생의 심리적 안정, 동기 부여 등 상담에 접근할 방법을 서술하세요.
-- 상담 기법: 초등학생에게 적용 가능한 구체적인 상담 기법(놀이, 미술, 인지행동 등)을 제시하세요.
-- 동기 부여 방법: 학생의 참여를 유도하고 성공 경험을 쌓게 할 구체적인 방법을 제시하세요.
-
-### 4. 실행 계획
-- 상담 주기: (예: "주 1회, 40분")
-- 활동 계획: 각 상담 회기별로 어떤 활동을 진행할지 구체적인 예시를 제시하세요.
-- 평가 방법: 상담의 효과를 어떻게 측정하고 평가할지 구체적인 방법을 제시하세요.
-
-### 5. 지원 체계
-- 학급 내 지원: 담임 교사와의 협력 방안, 학급 내에서 적용할 수 있는 지원책을 제시하세요.
-- 가정 연계 방안: 학부모와의 소통 및 가정에서의 실천을 유도할 방안을 제시하세요.
-- 전문기관 활용: 학교 상담 외 추가적인 도움이 필요할 경우 연계할 수 있는 기관을 제시하세요.
-"""
+            # 1. 학생 정보 검증 및 기본값 설정
+            student_name = student_info.get('student_name', '해당 학생')
+            grade = student_info.get('grade', 6)
+            main_concerns = student_info.get('main_concerns', [])
+            current_situation = student_info.get('current_situation', '')
+            query = student_info.get('query', '')
             
+            # main_concerns가 문자열로 온 경우 리스트로 변환
+            if isinstance(main_concerns, str):
+                main_concerns = [concern.strip() for concern in main_concerns.split(',') if concern.strip()]
+            
+            # 2. RAG 컨텍스트 생성 (기존 _create_context_from_search_results 재사용)
+            rag_context = ""
+            if search_results and len(search_results) > 0:
+                print(f"RAG 기반 상담계획 수립: 검색결과 {len(search_results)}개 활용")
+                rag_context = self._create_context_from_search_results(search_results)
+                
+                # 유사 사례 요약 생성
+                similar_cases_summary = self._extract_similar_cases_summary(search_results)
+            else:
+                print("RAG 검색결과 없음: 일반적인 상담 지식 기반으로 계획 수립")
+                rag_context = "관련 과거 상담 기록이 없습니다. 일반적인 교육학적 지식을 바탕으로 계획을 수립합니다."
+                similar_cases_summary = ""
+            
+            # 3. 현재 시간 및 계획 기간 설정
+            current_time = datetime.now()
+            plan_start_date = current_time.strftime("%Y년 %m월 %d일")
+            next_session_date = (current_time + timedelta(days=7)).strftime("%Y-%m-%d")
+            
+            # 4. 개선된 프롬프트 구성
+            plan_prompt = f"""당신은 초등학교 전문 상담교사입니다. 제공된 학생 정보와 과거 유사 상담 사례를 바탕으로 체계적이고 실행 가능한 개별 상담 계획을 수립해주세요.
+
+    === 학생 기본 정보 ===
+    • 학생명: {student_name}
+    • 학년: {grade}학년
+    • 주요 관심사항: {', '.join(main_concerns) if main_concerns else '정보 없음'}
+    • 현재 상황: {current_situation if current_situation else query}
+    • 계획 수립일: {plan_start_date}
+
+    === 과거 유사 상담 사례 분석 ===
+    {rag_context}
+
+    {similar_cases_summary}
+
+    위 정보를 종합하여 다음 형식으로 개별 상담 계획을 작성해주세요:
+
+    ---
+    ## 📋 개별 상담 계획서 - {student_name} 학생
+
+    ### 1. 학생 상황 분석
+    **• 현재 상황 요약:**
+    - 주요 어려움과 관심사항을 구체적으로 기술
+
+    **• 강점 및 자원:**
+    - 학생의 긍정적 특성, 관심분야, 지지체계 등
+
+    **• 위험 요인:**
+    - 주의 깊게 관찰해야 할 행동이나 상황
+
+    **• 과거 사례 학습:**
+    - 유사 사례에서 효과적이었던 접근법 (RAG 기반)
+
+    ### 2. 상담 목표 설정
+    **• 단기 목표 (1개월):**
+    - 구체적이고 측정 가능한 행동 변화 목표 1-2개
+
+    **• 중기 목표 (1학기):**
+    - 단기 목표를 확장한 학습 및 적응 목표
+
+    **• 장기 목표 (1년):**
+    - 궁극적인 성장 및 발달 목표
+
+    ### 3. 상담 전략 및 접근법
+    **• 기본 접근 방식:**
+    - 학생의 특성에 맞는 상담 이론 및 기법
+
+    **• 구체적 기법:**
+    - 놀이치료, 인지행동치료, 해결중심치료 등 활용 방안
+
+    **• 동기부여 전략:**
+    - 학생의 참여와 지속적 노력을 이끌어낼 방법
+
+    ### 4. 세부 실행 계획
+    **• 상담 빈도:** 주 1회, 40분 (총 12회기 계획)
+
+    **• 회기별 활동 계획:**
+    1-3회기: 라포 형성 및 문제 탐색
+    4-8회기: 핵심 이슈 다루기 및 기법 적용  
+    9-12회기: 변화 정착 및 종결 준비
+
+    **• 평가 방법:**
+    - 행동 관찰 체크리스트, 자기보고식 척도 등
+
+    ### 5. 지원 체계
+    **• 담임교사 협력방안:**
+    - 교실 내 지원 전략 및 정기 소통 계획
+
+    **• 학부모 상담 계획:**
+    - 가정 연계 방안 및 부모교육 필요성
+
+    **• 전문기관 연계:**
+    - 필요시 외부 전문기관 의뢰 기준
+
+    ### 6. 일정 및 점검
+    **• 다음 상담일:** {next_session_date}
+    **• 중간 평가일:** {(current_time + timedelta(days=30)).strftime("%Y-%m-%d")}
+    **• 계획 수정일:** {(current_time + timedelta(days=60)).strftime("%Y-%m-%d")}
+
+    ---
+    **※ 주의사항:** 계획 실행 과정에서 학생의 변화와 반응을 지속적으로 관찰하여 필요시 계획을 수정하시기 바랍니다."""
+
+            # 5. Gemini API 호출 (온도 낮춰서 일관된 답변)
             response = await self.model.ainvoke(
                 [HumanMessage(content=plan_prompt)],
                 config={
-                    "temperature": 0.5,
-                    "max_output_tokens": 2500,
+                    "temperature": 0.3,  # 계획서는 일관성이 중요하므로 낮은 온도
+                    "max_output_tokens": 3000,  # 충분한 토큰 할당
                 }
             )
 
             return response.content
         
+        # 6. 에러 처리 및 재시도 로직
         try:
             async with self._chat_semaphore:
                 plan_text = await self._retry_api_call(_generate_plan)
                 
+                # 7. 응답 품질 평가
+                plan_quality = self._assess_plan_quality(plan_text, search_results)
+                
                 return {
                     "status": "success",
                     "counseling_plan": plan_text,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "student_name": student_info.get('student_name', ''),
+                    "used_rag": bool(search_results),
+                    "rag_results_count": len(search_results) if search_results else 0,
+                    "plan_quality": plan_quality,
+                    "estimated_duration": "12주 (주 1회 상담)",
+                    "next_review_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
                 }
                 
         except Exception as e:
+            logger.exception(f"상담 계획 수립 실패 - 학생: {student_info.get('student_name', 'Unknown')}")
             return {
                 "status": "error",
-                "error": f"상담 계획 수립 실패: {str(e)}",
-                "timestamp": datetime.now().isoformat()
+                "error": f"상담 계획 수립 중 오류 발생: {str(e)}",
+                "timestamp": datetime.now().isoformat(),
+                "student_name": student_info.get('student_name', ''),
+                "fallback_available": True  # 기본 템플릿 사용 가능 여부
             }
+
+    def _extract_similar_cases_summary(self, search_results: List[Dict[str, Any]]) -> str:
+        """RAG 검색 결과에서 유사 사례의 핵심 정보를 요약"""
+        if not search_results:
+            return ""
+        
+        # 높은 유사도의 사례들만 선별
+        high_sim_cases = [r for r in search_results if r.get('similarity', 0) > 0.7]
+        
+        if not high_sim_cases:
+            return ""
+        
+        summary_parts = ["**유사 사례에서 학습한 효과적 접근법:**"]
+        
+        for i, case in enumerate(high_sim_cases[:3], 1):  # 최대 3개 사례
+            worry_tags = case.get('worry_tags', '')
+            counselor_answer = case.get('counselor_answer', '')
+            
+            # 상담사 답변에서 핵심 조언 추출 (첫 200자)
+            key_advice = counselor_answer[:200] + "..." if len(counselor_answer) > 200 else counselor_answer
+            
+            summary_parts.append(f"- 사례 {i} ({worry_tags}): {key_advice}")
+        
+        return "\n".join(summary_parts)
+
+    def _assess_plan_quality(self, plan_text: str, search_results: Optional[List]) -> Dict[str, Any]:
+        """생성된 상담 계획의 품질 평가"""
+        return {
+            "length": len(plan_text),
+            "has_structured_sections": plan_text.count("###") >= 5,  # 최소 5개 섹션
+            "includes_timeline": "회기" in plan_text or "주" in plan_text,
+            "includes_evaluation": "평가" in plan_text or "점검" in plan_text,
+            "rag_integration": bool(search_results) and "사례" in plan_text,
+            "actionable_goals": "구체적" in plan_text and "목표" in plan_text,
+            "estimated_completeness": min(100, (plan_text.count("###") * 20))  # 섹션 수 기반 완성도
+        }
 
 # 전역 서비스 인스턴스
 gemini_service = GeminiChatService()
