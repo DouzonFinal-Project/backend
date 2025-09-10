@@ -62,13 +62,13 @@ class ExtractKeywordsRequest(BaseModel):
 
 class CounselingPlanRequest(BaseModel):
     """상담 계획 수립 요청"""
-    student_name: str = Field(max_length=50)
-    grade: Optional[int] = Field(default=6, ge=1, le=6)
-    main_concerns: List[str] = Field(min_items=1, max_items=5)
-    current_situation: str = Field(min_length=10, max_length=1000)
-    family_background: Optional[str] = Field(default=None, max_length=500)
-    academic_level: Optional[str] = Field(default=None, pattern="^(high|medium|low)$")
-    social_skills: Optional[str] = Field(default=None, pattern="^(excellent|good|fair|needs_improvement)$")
+    query: Annotated[str, Field(min_length=1, max_length=2000, description="상담 질문")]
+    use_rag: bool = Field(default=True, description="RAG 검색 사용 여부")
+    search_top_k: Annotated[int, Field(default=3, ge=1, le=10)] = 3
+    worry_tag_filter: Optional[str] = Field(default=None, max_length=100, description="검색시 고민 태그 필터")
+    conversation_history: Optional[List[ChatMessage]] = Field(default=None, description="대화 히스토리 (최대 20개)")
+    student_name: Optional[str] = Field(default=None, max_length=50, description="학생 이름 (선택)")
+    context_info: Optional[Dict[str, str]] = Field(default=None, description="추가 상황 정보")
 
 class ChatResponse(BaseModel):
     """채팅 응답 모델"""
@@ -97,167 +97,260 @@ class MasterChatRequest(BaseModel):
     plan_payload: Optional[Dict[str, Any]] = Field(default=None, description="counseling_plan 전용: 학생정보 등")
     stream: bool = Field(default=False, description="스트리밍 모드 (현재 미지원; 추후 활성화 예정)")
 
-
 # =========================
-# 헬퍼 함수
+# 개선된 RAG 검색 함수
 # =========================
 
-async def perform_rag_search(query: str, top_k: int = 3, worry_tag: Optional[str] = None) -> List[Dict[str, Any]]:
-    """RAG 검색 수행 - 개선된/안전한 버전"""
+async def perform_rag_search_unified(
+    query: str, 
+    top_k: int = 3, 
+    worry_tag: Optional[str] = None,
+    student_name: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    통합된 RAG 검색 함수 - 모든 액션에서 공통 사용
+    """
     try:
         collection = get_milvus_collection()
 
-        # --- 컬렉션 로드 상태 안전 확인 (is_loaded 대체) ---
-        is_loaded = False
-        try:
-            load_state = utility.load_state(collection.name)
-            if hasattr(load_state, "name"):
-                is_loaded = load_state.name.lower() == "loaded"
-            else:
-                is_loaded = "loaded" in str(load_state).lower()
-        except Exception:
-            # load_state 조회 실패하면 시도해서 로드해본다.
-            is_loaded = False
+        # 컬렉션 로드 상태 확인 및 로드
+        is_loaded = await _ensure_collection_loaded(collection)
+        if not is_loaded:
+            logger.warning("Milvus collection 로드 실패")
+            return []
+
+        # 임베딩 생성
+        embedding = await _generate_embedding(query)
+        if not embedding:
+            logger.error("임베딩 생성 실패")
+            return []
+
+        # 검색 쿼리 최적화 (학생 이름 포함)
+        enhanced_query = query
+        if student_name:
+            enhanced_query = f"{student_name} 학생 {query}"
+
+        # 검색 표현식 생성
+        search_expr = _build_search_expression(worry_tag, student_name)
+
+        # 검색 실행
+        search_results = await _execute_search(
+            collection, 
+            embedding, 
+            top_k, 
+            search_expr
+        )
+
+        # 결과 처리 및 반환
+        return _process_search_results(search_results, top_k)
+
+    except Exception as e:
+        logger.exception(f"통합 RAG 검색 실패: {e}")
+        return []
+
+async def _ensure_collection_loaded(collection) -> bool:
+    """컬렉션 로드 상태 확인 및 로드"""
+    try:
+        load_state = utility.load_state(collection.name)
+        if hasattr(load_state, "name"):
+            is_loaded = load_state.name.lower() == "loaded"
+        else:
+            is_loaded = "loaded" in str(load_state).lower()
 
         if not is_loaded:
-            # 메모리로 로드 (블로킹) — 그 뒤에 잠깐 대기해서 실제로 로드되었는지 확인
             collection.load()
-            # 짧게 기다려 로드 완료 확인
+            # 로드 완료 대기
             for _ in range(10):
                 try:
                     load_state = utility.load_state(collection.name)
-                    if (hasattr(load_state, "name") and load_state.name.lower() == "loaded") or ("loaded" in str(load_state).lower()):
-                        is_loaded = True
-                        break
+                    if (hasattr(load_state, "name") and load_state.name.lower() == "loaded") or \
+                       ("loaded" in str(load_state).lower()):
+                        return True
                 except Exception:
                     pass
                 await asyncio.sleep(0.2)
+        
+        return is_loaded
+    except Exception as e:
+        logger.error(f"컬렉션 로드 상태 확인 실패: {e}")
+        return False
 
-        # --- 임베딩 생성: sync/coroutine 안전 처리 ---
+async def _generate_embedding(query: str):
+    """임베딩 생성"""
+    try:
         from routers.milvus import embeddings
         emb_result = embeddings.aembed_query(query)
+        
         if asyncio.iscoroutine(emb_result):
-            emb = await emb_result
+            embedding = await emb_result
         else:
-            emb = emb_result
+            embedding = emb_result
+        
+        return list(embedding) if embedding is not None else None
+    except Exception as e:
+        logger.error(f"임베딩 생성 실패: {e}")
+        return None
 
-        if emb is None:
-            raise RuntimeError("임베딩 생성 실패: 반환값이 None입니다.")
-        emb = list(emb)  # numpy array인 경우 안전하게 리스트 변환
+def _build_search_expression(worry_tag: Optional[str], student_name: Optional[str]) -> Optional[str]:
+    """검색 표현식 생성 - worry_tags는 VARCHAR 필드"""
+    expressions = []
+    
+    # worry_tag 필터링 (VARCHAR 필드이므로 LIKE 연산 사용)
+    if worry_tag:
+        if isinstance(worry_tag, (list, tuple)):
+            raw_tags = [str(t).strip() for t in worry_tag if str(t).strip()]
+        else:
+            raw = str(worry_tag).strip()
+            raw_tags = [t.strip() for t in re.split(r'[,/|;\s]+', raw) if t.strip()]
 
-        # --- 검색 (블로킹) 를 executor로 실행해 이벤트 루프 차단 방지 ---
+        if raw_tags:
+            # 따옴표 제거 등 sanitize
+            clean_tags = [t.replace('"', '').replace("'", "") for t in raw_tags]
+            tag_clauses = [f'worry_tags like "%{tag}%"' for tag in clean_tags]
+            expressions.append("(" + " or ".join(tag_clauses) + ")")
+    
+    # student_name 필터링 (정확한 매치)
+    if student_name:
+        clean_name = student_name.replace('"', '').replace("'", "")
+        expressions.append(f'student_name == "{clean_name}"')
+    
+    return " and ".join(expressions) if expressions else None
+
+async def _execute_search(collection, embedding: List[float], top_k: int, expr: Optional[str]) -> List:
+    """검색 실행"""
+    try:
         search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
-        expr = None
-        if worry_tag:
-            # worry_tag가 리스트로 올 수도 있으니 처리
-            if isinstance(worry_tag, (list, tuple)):
-                raw_tags = [str(t).strip() for t in worry_tag if str(t).strip()]
-            else:
-                raw = str(worry_tag).strip()
-                # 쉼표, 슬래시, 파이프, 세미콜론, 공백 등으로 분리
-                raw_tags = [t.strip() for t in re.split(r'[,/|;\s]+', raw) if t.strip()]
-
-            # 따옴표 제거 등 간단 sanitize
-            tags = [t.replace('"', '').replace("'", "") for t in raw_tags]
-
-            if tags:
-                clauses = [f'worry_tags like "%{tag}%"' for tag in tags]
-                expr = "(" + " or ".join(clauses) + ")"
-
-        # (그 다음 기존 collection.search 호출은 그대로 사용)
-
-
+        
         loop = asyncio.get_running_loop()
-        print("DEBUG RAG expr:", expr, "================")
+        logger.debug(f"RAG 검색 실행 - expr: {expr}, top_k: {top_k}")
+        
         results = await loop.run_in_executor(
             None,
             lambda: collection.search(
-                data=[emb],
+                data=[embedding],
                 anns_field="embedding",
                 param=search_params,
-                limit=top_k * 2,
+                limit=top_k * 2,  # 필터링을 고려해 더 많이 가져옴
                 expr=expr,
-                output_fields=["id", "title", "student_query", "counselor_answer", "date", "teacher_name", "student_name", "worry_tags"],
+                output_fields=["id", "title", "student_query", "counselor_answer", 
+                             "date", "teacher_name", "student_name", "worry_tags"],
             )
         )
+        
+        return results[0] if results else []
+    except Exception as e:
+        logger.error(f"검색 실행 실패: {e}")
+        return []
 
-        # results 는 list( 검색 배치 수 ) 내에 hits
-        if not results or len(results) == 0:
-            return []
+def _process_search_results(hits: List, top_k: int) -> List[Dict[str, Any]]:
+    """검색 결과 처리"""
+    if not hits:
+        return []
 
-        hits = results[0]
-        output = []
+    output = []
+    
+    # 1차: 임계값(>=0.2) 적용
+    for hit in hits:
+        try:
+            similarity = round(1 - hit.distance, 4)
+        except Exception:
+            similarity = getattr(hit, "score", 0.0)
 
-        # 1) 첫 번째 패스: 기존 임계값(>=0.2) 적용
-        for i, hit in enumerate(hits):
+        if similarity >= 0.2:
+            entity = getattr(hit, "entity", {}) or {}
+            if not entity:
+                try:
+                    entity = hit.raw or {}
+                except Exception:
+                    entity = {}
+
+            result = {
+                "id": entity.get("id"),
+                "title": entity.get("title"),
+                "student_query": entity.get("student_query"),
+                "counselor_answer": entity.get("counselor_answer"),
+                "date": entity.get("date"),
+                "teacher_name": entity.get("teacher_name"),
+                "student_name": entity.get("student_name"),
+                "worry_tags": entity.get("worry_tags"),
+                "similarity": similarity,
+            }
+            output.append(result)
+            if len(output) >= top_k:
+                break
+
+    # 2차: 결과가 없으면 임계값 무시하고 top_k개 반환
+    if not output and hits:
+        logger.debug("임계값 조건 미충족 - 상위 결과로 폴백")
+        for hit in hits[:top_k]:
             try:
                 similarity = round(1 - hit.distance, 4)
             except Exception:
-                similarity = getattr(hit, "score", None) or 0.0
+                similarity = getattr(hit, "score", 0.0)
 
-            if similarity >= 0.2:
-                entity = getattr(hit, "entity", {}) or {}
-                if not entity:
-                    try:
-                        entity = hit.raw or {}
-                    except Exception:
-                        entity = {}
-
-                result = {
-                    "id": entity.get("id"),
-                    "title": entity.get("title"),
-                    "student_query": entity.get("student_query"),
-                    "counselor_answer": entity.get("counselor_answer"),
-                    "date": entity.get("date"),
-                    "teacher_name": entity.get("teacher_name"),
-                    "student_name": entity.get("student_name"),
-                    "worry_tags": entity.get("worry_tags"),
-                    "similarity": similarity,
-                }
-                output.append(result)
-                if len(output) >= top_k:
-                    break
-
-        # 2) 폴백: 임계값으로 걸러진 결과가 하나도 없으면 (예: "안녕안녕" 같이 의미적 유사도가 낮을 때)
-        #    동일한 hits에서 임계값을 무시하고 top_k 개를 사용하도록 함.
-        if not output and hits:
-            print("DEBUG: No high-sim hits — falling back to top-k hits (ignoring similarity threshold).")
-            for i, hit in enumerate(hits):
+            entity = getattr(hit, "entity", {}) or {}
+            if not entity:
                 try:
-                    similarity = round(1 - hit.distance, 4)
+                    entity = hit.raw or {}
                 except Exception:
-                    similarity = getattr(hit, "score", None) or 0.0
+                    entity = {}
 
-                entity = getattr(hit, "entity", {}) or {}
-                if not entity:
-                    try:
-                        entity = hit.raw or {}
-                    except Exception:
-                        entity = {}
+            result = {
+                "id": entity.get("id"),
+                "title": entity.get("title"),
+                "student_query": entity.get("student_query"),
+                "counselor_answer": entity.get("counselor_answer"),
+                "date": entity.get("date"),
+                "teacher_name": entity.get("teacher_name"),
+                "student_name": entity.get("student_name"),
+                "worry_tags": entity.get("worry_tags"),
+                "similarity": similarity,
+            }
+            output.append(result)
 
-                result = {
-                    "id": entity.get("id"),
-                    "title": entity.get("title"),
-                    "student_query": entity.get("student_query"),
-                    "counselor_answer": entity.get("counselor_answer"),
-                    "date": entity.get("date"),
-                    "teacher_name": entity.get("teacher_name"),
-                    "student_name": entity.get("student_name"),
-                    "worry_tags": entity.get("worry_tags"),
-                    "similarity": similarity,
-                }
-                output.append(result)
-                if len(output) >= top_k:
-                    break
+    return output
 
-        return output
+# =========================
+# 공통 RAG 처리 함수
+# =========================
 
-
+async def execute_rag_search_for_action(
+    action: str,
+    request_data: Dict[str, Any]
+) -> tuple[List[Dict[str, Any]], bool]:
+    """
+    액션별로 RAG 검색을 실행하고 결과를 반환
+    Returns: (search_results, used_rag)
+    """
+    # RAG 사용 조건 확인
+    use_rag = request_data.get('use_rag', True)
+    query = request_data.get('query')
+    
+    # RAG를 사용하는 액션들
+    rag_enabled_actions = {'counseling_chat', 'counseling_plan'}
+    
+    if not use_rag or action not in rag_enabled_actions or not query:
+        return [], False
+    
+    try:
+        search_query = query
+        student_name = request_data.get('student_name')
+        if student_name:
+            search_query = f"{student_name} 학생 {query}"
+            
+        search_results = await perform_rag_search_unified(
+            query=search_query,
+            top_k=request_data.get('search_top_k', 3),
+            worry_tag=request_data.get('worry_tag_filter'),
+            student_name=student_name
+        )
+        
+        logger.info(f"RAG 검색 완료 ({action}): {len(search_results)}개 결과")
+        return search_results, bool(search_results)
+        
     except Exception as e:
-        print(f"RAG 검색 실패 - 상세 오류: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
+        logger.exception(f"RAG 검색 실패 ({action}): {e}")
+        return [], False
 
 def log_conversation(query: str, response: str, used_rag: bool, search_count: int):
     """대화 로그 기록 (백그라운드 태스크)"""
@@ -269,10 +362,9 @@ def log_conversation(query: str, response: str, used_rag: bool, search_count: in
             "used_rag": used_rag,
             "search_results_count": search_count,
         }
-        # 실제 구현에서는 데이터베이스나 로그 파일에 저장
-        print(f"대화 로그: {json.dumps(log_data, ensure_ascii=False)}")
+        logger.info(f"대화 로그: {json.dumps(log_data, ensure_ascii=False)}")
     except Exception as e:
-        print(f"로그 기록 실패: {e}")
+        logger.error(f"로그 기록 실패: {e}")
 
 # =========================
 # templates
@@ -285,7 +377,7 @@ def _load_json_data(filename: str) -> Dict[str, Any]:
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"ERROR: '{filename}' 파일을 찾을 수 없습니다. 경로를 확인해주세요.")
+        logger.error(f"'{filename}' 파일을 찾을 수 없습니다. 경로를 확인해주세요.")
         raise HTTPException(status_code=500, detail="서버 템플릿 파일을 찾을 수 없습니다.")
     
 @router.get("/chat-templates/")
@@ -347,38 +439,24 @@ async def master_chat(request: MasterChatRequest, background_tasks: BackgroundTa
         else:
             action = "counseling_chat"  # 기본
 
-    # Enforce single-action (user requested single-action behavior)
-    # (If they accidentally sent multiple elsewhere, we ignore extras.)
-    # Validate required fields for chosen action
-    if action in {"counseling_chat", "quick_chat"} and not request.query:
+    # 필수 필드 검증
+    if action in {"counseling_chat", "quick_chat", "counseling_plan"} and not request.query:
         raise HTTPException(status_code=400, detail="query is required for chat actions")
     if action == "summarize" and not request.conversation_history:
         raise HTTPException(status_code=400, detail="conversation_history is required for summarize")
     if action == "extract_keywords" and not (request.extract_text or request.query or request.conversation_history):
         raise HTTPException(status_code=400, detail="Need text (extract_text or query or conversation_history) to extract keywords")
-    if action == "counseling_plan" and not request.plan_payload and not request.query:
-        # allow plan_payload or query (if user provided student info in query)
-        raise HTTPException(status_code=400, detail="plan_payload (or a query with student info) is required for counseling_plan")
 
-    # 2) RAG (필요한 경우): counseling_chat에서 사용되는 기존 perform_rag_search 재사용
-    search_results = []
-    used_rag = False
-    if request.use_rag and action == "counseling_chat" and request.query:
-        try:
-            search_query = request.query
-            if request.student_name:
-                search_query = f"{request.student_name} 학생 {request.query}"
-            search_results = await perform_rag_search(
-                query=search_query,
-                top_k=request.search_top_k,
-                worry_tag=request.worry_tag_filter
-            )
-            used_rag = bool(search_results)
-        except Exception as e:
-            # RAG 실패는 치명적이지 않게 처리 (로그는 남기고 진행)
-            logging.exception("master-chat: RAG search failed")
-            search_results = []
-            used_rag = False
+    # 2) 통합 RAG 검색 실행
+    request_dict = {
+        'use_rag': request.use_rag,
+        'query': request.query,
+        'search_top_k': request.search_top_k,
+        'worry_tag_filter': request.worry_tag_filter,
+        'student_name': request.student_name
+    }
+    
+    search_results, used_rag = await execute_rag_search_for_action(action, request_dict)
 
     # 3) 대화 히스토리/컨텍스트 준비 (기존과 동일하게 최근 일부만 사용)
     conversation_history = None
@@ -395,11 +473,8 @@ async def master_chat(request: MasterChatRequest, background_tasks: BackgroundTa
         if parts:
             enhanced_query = f"{enhanced_query}\n\n[추가 상황 정보]\n" + "\n".join(parts)
 
-    # 5) 스트리밍 처리(현재 미지원) — 사용자가 나중에 켜면 gemini_service.stream_generate 계열로 구현 가능
+    # 5) 스트리밍 처리(현재 미지원)
     if request.stream:
-        # 아직 서비스 레이어에 완전한 스트리밍 래퍼가 없다면 501을 반환합니다.
-        # 구현 방법 (참고): gemini_service 내부에 stream_generate_counseling_response(...)를 만들고
-        # 그 함수가 async generator를 반환하도록 한 뒤 StreamingResponse로 감싸면 됩니다.
         raise HTTPException(status_code=501, detail="streaming mode is not implemented yet. Will add a streaming generator in gemini_service and then enable this flag.")
 
     # 6) 액션별 실행 (단일 액션)
@@ -484,16 +559,50 @@ async def master_chat(request: MasterChatRequest, background_tasks: BackgroundTa
                 raise HTTPException(status_code=500, detail=result.get("error", "keyword extraction failed"))
 
         elif action == "counseling_plan":
-            payload = request.plan_payload or {"query": request.query}
-            result = await gemini_service.generate_counseling_plan(payload)
+            # student_info 구성
+            student_info = {
+                "student_name": request.student_name or "해당 학생", 
+                "query": request.query,
+                "grade": 6,  # 기본값
+                "main_concerns": [],
+                "current_situation": request.query,
+            }
+            
+            # plan_payload나 context_info에서 추가 정보 추출
+            if request.plan_payload:
+                student_info.update(request.plan_payload)
+            elif request.context_info:
+                for key, value in request.context_info.items():
+                    if key in ["grade", "main_concerns", "current_situation", "student_name"]:
+                        student_info[key] = value
+
+            # worry_tag_filter를 main_concerns로 활용
+            if request.worry_tag_filter:
+                concerns = [tag.strip() for tag in re.split(r'[,/|;\s]+', request.worry_tag_filter) if tag.strip()]
+                student_info["main_concerns"] = concerns
+
+            result = await gemini_service.generate_counseling_plan(
+                student_info=student_info,
+                search_results=search_results  # RAG 결과 전달
+            )
+            
             if isinstance(result, dict) and result.get("status") == "success":
+                # 백그라운드 로깅
+                background_tasks.add_task(
+                    log_conversation,
+                    f"상담계획 수립: {request.student_name or '익명'} - {request.query[:100]}",
+                    result.get("counseling_plan", "")[:200] + "...",
+                    used_rag,
+                    len(search_results)
+                )
+                
                 response_time = (datetime.now() - start_time).total_seconds()
                 return ChatResponse(
                     status="success",
                     response=result.get("counseling_plan"),
                     timestamp=result.get("timestamp", datetime.now().isoformat()),
-                    used_rag=False,
-                    search_results_count=0,
+                    used_rag=used_rag,
+                    search_results_count=len(search_results) if used_rag else 0,
                     response_time=response_time
                 )
             else:
@@ -505,34 +614,25 @@ async def master_chat(request: MasterChatRequest, background_tasks: BackgroundTa
     except HTTPException:
         raise
     except Exception as e:
-        logging.exception("master-chat failed")
+        logger.exception("master-chat failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/counseling-chat/", response_model=ChatResponse)
 async def counseling_chat(request: CounselingChatRequest, background_tasks: BackgroundTasks):
-    """
-    전문 상담 채팅 (RAG 지원)
-    - 과거 상담 기록을 검색하여 컨텍스트로 활용
-    - 대화 히스토리 지원
-    - 학생별 맞춤 상담
-    """
+    """전문 상담 채팅 (RAG 지원)"""
     start_time = datetime.now()
     
     try:
-        search_results = []
+        # 통합 RAG 검색 사용
+        request_dict = {
+            'use_rag': request.use_rag,
+            'query': request.query,
+            'search_top_k': request.search_top_k,
+            'worry_tag_filter': request.worry_tag_filter,
+            'student_name': request.student_name
+        }
         
-        # RAG 검색 수행
-        if request.use_rag:
-            # 학생 이름이 있으면 검색 쿼리에 포함
-            search_query = request.query
-            if request.student_name:
-                search_query = f"{request.student_name} 학생 {request.query}"
-                
-            search_results = await perform_rag_search(
-                query=search_query,
-                top_k=request.search_top_k,
-                worry_tag=request.worry_tag_filter
-            )
+        search_results, used_rag = await execute_rag_search_for_action('counseling_chat', request_dict)
         
         # 대화 히스토리 변환
         conversation_history = None
@@ -552,7 +652,6 @@ async def counseling_chat(request: CounselingChatRequest, background_tasks: Back
                 enhanced_query = f"{request.query}\n\n[추가 상황 정보]\n" + "\n".join(context_parts)
         
         # Gemini API 호출
-        print("--------------", enhanced_query, search_results, conversation_history, "======================")
         result = await gemini_service.generate_counseling_response(
             user_query=enhanced_query,
             search_results=search_results,
@@ -567,7 +666,7 @@ async def counseling_chat(request: CounselingChatRequest, background_tasks: Back
                 log_conversation, 
                 request.query, 
                 result["response"], 
-                request.use_rag, 
+                used_rag, 
                 len(search_results)
             )
             
@@ -575,9 +674,9 @@ async def counseling_chat(request: CounselingChatRequest, background_tasks: Back
                 status="success",
                 response=result["response"],
                 timestamp=result["timestamp"],
-                used_rag=request.use_rag,
+                used_rag=used_rag,
                 search_results_count=len(search_results),
-                search_results=search_results if request.use_rag else None,
+                search_results=search_results if used_rag else None,
                 context_quality=result.get("context_quality"),
                 response_time=response_time
             )
@@ -585,17 +684,13 @@ async def counseling_chat(request: CounselingChatRequest, background_tasks: Back
             raise HTTPException(status_code=500, detail=result["error"])
     
     except Exception as e:
+        logger.exception("상담 채팅 처리 실패")
         raise HTTPException(status_code=500, detail=f"상담 채팅 처리 실패: {str(e)}")
 
 
 @router.post("/quick-chat/", response_model=ChatResponse)
 async def quick_chat(request: QuickChatRequest):
-    """
-    간단 채팅 (RAG 없이)
-    - 빠른 응답을 위한 일반적인 교육 상담
-    - 과거 기록 검색 없이 기본 지식으로만 답변
-    - 긴급도에 따른 응답 우선순위 적용
-    """
+    """간단 채팅 (RAG 없이)"""
     start_time = datetime.now()
     
     try:
@@ -636,38 +731,96 @@ async def quick_chat(request: QuickChatRequest):
             raise HTTPException(status_code=500, detail=result["error"])
     
     except Exception as e:
+        logger.exception("간단 채팅 처리 실패")
         raise HTTPException(status_code=500, detail=f"간단 채팅 처리 실패: {str(e)}")
 
 
-@router.post("/counseling-plan/")
-async def create_counseling_plan(request: CounselingPlanRequest):
-    """개별 학생을 위한 상담 계획 수립"""
+@router.post("/counseling-plan/", response_model=ChatResponse)
+async def create_counseling_plan(request: CounselingPlanRequest, background_tasks: BackgroundTasks):
+    """개별 학생을 위한 상담 계획 수립 (RAG 검색 결과 기반)"""
+    start_time = datetime.now()
+
     try:
-        student_info = {
-            "student_name": request.student_name,
-            "grade": request.grade,
-            "main_concerns": request.main_concerns,
-            "current_situation": request.current_situation,
-            "family_background": request.family_background,
-            "academic_level": request.academic_level,
-            "social_skills": request.social_skills
+        # 통합 RAG 검색 사용
+        request_dict = {
+            'use_rag': request.use_rag,
+            'query': request.query,
+            'search_top_k': request.search_top_k,
+            'worry_tag_filter': request.worry_tag_filter,
+            'student_name': request.student_name
         }
         
-        result = await gemini_service.generate_counseling_plan(student_info)
+        search_results, used_rag = await execute_rag_search_for_action('counseling_plan', request_dict)
+
+        # 학생 정보 구성
+        student_info = {
+            "student_name": request.student_name or "해당 학생",
+            "query": request.query,
+            "grade": 6,  # 기본값, 추후 request에서 받도록 확장 가능
+            "main_concerns": [],  # worry_tag_filter에서 추출 가능
+            "current_situation": request.query,
+        }
         
-        if result["status"] == "success":
-            return {
-                "status": "success",
-                "counseling_plan": result["counseling_plan"],
-                "student_name": request.student_name,
-                "timestamp": result["timestamp"],
-                "plan_duration": "1학기 (약 4개월)"
-            }
+        # context_info가 있으면 student_info에 병합
+        if request.context_info:
+            for key, value in request.context_info.items():
+                if key in ["grade", "main_concerns", "current_situation"]:
+                    student_info[key] = value
+                elif key == "concerns":
+                    student_info["main_concerns"] = value.split(",") if isinstance(value, str) else value
+
+        # worry_tag_filter가 있으면 main_concerns로 활용
+        if request.worry_tag_filter:
+            if isinstance(request.worry_tag_filter, str):
+                concerns = [tag.strip() for tag in re.split(r'[,/|;\s]+', request.worry_tag_filter) if tag.strip()]
+            else:
+                concerns = request.worry_tag_filter
+            student_info["main_concerns"] = concerns
+
+        logger.info(f"상담 계획 수립 시작 - 학생: {student_info['student_name']}, RAG 사용: {used_rag}, 결과 수: {len(search_results)}")
+
+        # 상담 계획 생성
+        result = await gemini_service.generate_counseling_plan(
+            student_info=student_info,
+            search_results=search_results  # RAG 결과 전달
+        )
+        
+        response_time = (datetime.now() - start_time).total_seconds()
+
+        # 성공 응답 반환
+        if result.get("status") == "success":
+            # 백그라운드 로깅
+            background_tasks.add_task(
+                log_conversation,
+                f"상담계획 수립: {request.student_name or '익명'} - {request.query[:100]}",
+                result.get("counseling_plan", "")[:200] + "...",
+                used_rag,
+                len(search_results)
+            )
+            
+            return ChatResponse(
+                status="success",
+                response=result["counseling_plan"],
+                timestamp=result["timestamp"],
+                used_rag=used_rag,
+                search_results_count=len(search_results),
+                search_results=search_results if len(search_results) > 0 else None,
+                response_time=response_time
+            )
         else:
-            raise HTTPException(status_code=500, detail=result["error"])
+            raise HTTPException(
+                status_code=500, 
+                detail=f"상담 계획 생성 실패: {result.get('error', 'Unknown error')}"
+            )
     
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"상담 계획 수립 실패: {str(e)}")
+        logger.exception("상담 계획 수립 중 예상치 못한 오류")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"상담 계획 수립 처리 실패: {str(e)}"
+        )
 
 
 @router.post("/summarize-conversation/")
@@ -694,6 +847,7 @@ async def summarize_conversation(request: SummarizeRequest):
             raise HTTPException(status_code=500, detail=result["error"])
     
     except Exception as e:
+        logger.exception("대화 요약 실패")
         raise HTTPException(status_code=500, detail=f"대화 요약 실패: {str(e)}")
 
 
@@ -716,6 +870,7 @@ async def extract_keywords(request: ExtractKeywordsRequest):
             raise HTTPException(status_code=500, detail=result["error"])
     
     except Exception as e:
+        logger.exception("키워드 추출 실패")
         raise HTTPException(status_code=500, detail=f"키워드 추출 실패: {str(e)}")
 
 @router.get("/service-status/")
@@ -730,7 +885,7 @@ async def get_service_status():
         
         gemini_status = "healthy" if test_result["status"] == "success" else "error"
         
-        # --- Milvus 상태 체크 안전한 버전 ---
+        # Milvus 상태 체크 안전한 버전
         milvus_status = "healthy"
         milvus_info = {}
         try:
@@ -806,6 +961,7 @@ async def get_service_status():
         }
     
     except Exception as e:
+        logger.exception("서비스 상태 확인 실패")
         return {
             "status": "error",
             "error": str(e),
@@ -888,8 +1044,8 @@ async def debug_rag_system(test_query: str = "학습부진 상담"):
                 output_fields=["id", "title", "worry_tags"]
             )
 
-        # 3. 테스트 검색
-        test_results = await perform_rag_search(test_query, top_k=3)
+        # 3. 테스트 검색 (개선된 통합 함수 사용)
+        test_results = await perform_rag_search_unified(test_query, top_k=3)
 
         return {
             "status": "success",
@@ -902,6 +1058,7 @@ async def debug_rag_system(test_query: str = "학습부진 상담"):
             }
         }
     except Exception as e:
+        logger.exception("RAG 디버깅 실패")
         import traceback
         return {
             "status": "error",
