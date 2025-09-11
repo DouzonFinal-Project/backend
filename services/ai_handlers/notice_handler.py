@@ -144,7 +144,8 @@ async def build_notice_response(notices, message: str):
     
     notice_info = []
     for notice in notices:
-        notice_info.append(f"{notice.title} - {notice.date}")
+        # content만 AI에게 전달 (날짜 정보는 제외)
+        notice_info.append(f"{notice.title}: {notice.content}")
     
     notice_list = "\n".join([f"{i+1}. {info}" for i, info in enumerate(notice_info)])
     
@@ -169,7 +170,7 @@ async def build_notice_response(notices, message: str):
     
 
     response = await model.ainvoke(prompt)
-    return response.content
+    return f"<!-- NOTICE_RESPONSE -->{response.content}"
 
 
 async def build_notice_response_with_summary(notices, message: str, start_date, end_date):
@@ -193,9 +194,8 @@ async def build_notice_response_with_summary(notices, message: str, start_date, 
     for date_str, date_notices in notices_by_date.items():
         date_summary = f"\n{date_str}:"
         for notice in date_notices:
-            # content를 간단히 요약 (최대 50자)
-            content_summary = notice.content[:50] + "..." if len(notice.content) > 50 else notice.content
-            date_summary += f"\n- {notice.title}: {content_summary}"
+            # content만 AI에게 전달 (날짜 정보는 제외)
+            date_summary += f"\n- {notice.title}: {notice.content}"
         summary_info.append(date_summary)
     
     summary_text = "".join(summary_info)
@@ -221,6 +221,6 @@ async def build_notice_response_with_summary(notices, message: str, start_date, 
     
     response = await model.ainvoke(prompt)
 
-    return response.content
+    return f"<!-- NOTICE_RESPONSE -->{response.content}"
 
 

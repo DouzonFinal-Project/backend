@@ -47,14 +47,17 @@ async def handle_grade_query(message: str, db: Session):
             # 과목명 조회
             subject = db.query(SubjectModel).filter(SubjectModel.id == grade.subject_id).first()
             subject_name = subject.name if subject else f"과목ID {grade.subject_id}"
-            grade_info.append(f"- {subject_name}: {grade.average_score}점 (등급: {grade.grade_letter})")
+            
+            # term에 따른 시험 구분
+            term_name = "중간고사" if grade.term == 1 else "기말고사" if grade.term == 2 else f"{grade.term}학기"
+            grade_info.append(f"• {subject_name}: {term_name} {grade.average_score}점 (등급: {grade.grade_letter})")
     
     if test_scores:
         if grade_info:
             grade_info.append("")
         grade_info.append("시험 성적:")
         for test_score in test_scores:
-            grade_info.append(f"- {test_score.subject_name}: {test_score.score}점")
+            grade_info.append(f"• {test_score.subject_name}: {test_score.score}점")
     
     grade_list = "\n".join(grade_info)
     
@@ -65,8 +68,16 @@ async def handle_grade_query(message: str, db: Session):
     {grade_list}
     
     사용자가 "{message}"라고 질문했습니다. 
-    위 정보를 바탕으로 친근하고 자연스러운 한국어로 답변해주세요.
-    성적이 좋으면 칭찬하고, 개선이 필요하면 격려하는 말을 포함해주세요.
+    위 정보를 바탕으로 간결하고 전문적인 한국어로 답변해주세요.
+    
+    답변 형식:
+    - 이모지 사용 금지
+    - 불필요한 수식어 제거
+    - 마크다운 형식 사용 금지 (별표, 굵은 글씨 등)
+    - 일반 텍스트로만 답변
+    - 성적이 좋으면 칭찬하고, 개선이 필요하면 격려하는 말을 포함
+    - 과목별로 간단명료하게 정리
+    - 예시: "수학 100점 A+, 영어 96점 A+로 우수한 성적을 보이고 있습니다. 국어 60점 D는 개선이 필요합니다."
     """
     
     # Gemini API 호출
