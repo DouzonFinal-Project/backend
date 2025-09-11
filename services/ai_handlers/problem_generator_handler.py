@@ -378,8 +378,11 @@ class ProblemGeneratorHandler:
 
 1. 문제 내용
 ① 선택지1
+
 ② 선택지2
+
 ③ 선택지3
+
 ④ 선택지4
 
 - 주관식일 경우 아래와 같이 해주세요

@@ -85,8 +85,8 @@ async def handle_event_add(message: str, db: Session):
     # 시간 파싱
     start_time, end_time = await parse_time_period(message)
     
-    # Description 생성 (시간 정보 제외)
-    description = event_title
+    # Description 생성 (상세내용이 있으면 사용, 없으면 이벤트명 사용)
+    description = await extract_description(message) or event_title
     
     new_event = EventModel(
         event_name=event_title,
@@ -236,18 +236,20 @@ async def build_ai_response(events, message: str):
 
 async def extract_event_title(message: str) -> str:
     """AI를 사용하여 메시지에서 일정 제목만 추출"""
+    # "상세내용:" 이전 부분만 추출하여 이벤트명 추출
+    main_message = message.split('상세내용:')[0].strip()
+    
     prompt = f"""
     다음 메시지에서 일정 제목만 추출해주세요:
     
-    메시지: "{message}"
+    메시지: "{main_message}"
     
     예시:
-    - "오늘 오후에 학생면담 일정을 추가해줘" → "학생면담"
-    - "내일 수학시험 일정 추가" → "수학시험"
-    - "다음주 체육대회 일정 등록" → "체육대회"
-    - "오늘 오후에 이예은 상담 일정을 추가해줘" → "이예은 상담"
+    - "10월 25일(토) 오전 10시 축제 일정을 추가해줘" → "축제"
+    - "10월 13일(월)부터 10월 17일(금)까지 중간고사 일정을 추가해줘" → "중간고사"
+    - "9월 15일(월)부터 9월 19일(금)까지 예방접종 일정을 추가해줘" → "예방접종"
     
-    일정 제목만 정확히 답변해주세요.
+    일정 제목만 정확히 답변해주세요. (최대 10자 이내)
     """
     
     try:
@@ -255,14 +257,14 @@ async def extract_event_title(message: str) -> str:
         result = response.content.strip()
         
         # 결과가 너무 길거나 의미없는 경우 키워드 기반 추출 사용
-        if len(result) > 20 or not result:
-            return await extract_event_title_by_keywords(message)
+        if len(result) > 10 or not result:
+            return await extract_event_title_by_keywords(main_message)
         
         return result
         
     except Exception as e:
         print(f"AI 추출 실패, 키워드 기반 추출로 대체: {e}")
-        return await extract_event_title_by_keywords(message)
+        return await extract_event_title_by_keywords(main_message)
 
 
 async def extract_time_info(message: str) -> str:
@@ -573,8 +575,13 @@ async def parse_period_dates(message: str):
             f"{datetime.now().year}-{int(match.group(1)):02d}-{int(match.group(2)):02d}",
             f"{datetime.now().year}-{int(match.group(1)):02d}-{int(match.group(3)):02d}"
         )),
-        # "9월 10일부터 10월 5일까지"
+        # "9월 10일부터 10월 5일까지" (괄호 없음)
         (r'(\d{1,2})월\s*(\d{1,2})일부터\s*(\d{1,2})월\s*(\d{1,2})일까지', lambda match: (
+            f"{datetime.now().year}-{int(match.group(1)):02d}-{int(match.group(2)):02d}",
+            f"{datetime.now().year}-{int(match.group(3)):02d}-{int(match.group(4)):02d}"
+        )),
+        # "10월 13일(월)부터 10월 17일(금)까지" (괄호 있음)
+        (r'(\d{1,2})월\s*(\d{1,2})일\([^)]*\)부터\s*(\d{1,2})월\s*(\d{1,2})일\([^)]*\)까지', lambda match: (
             f"{datetime.now().year}-{int(match.group(1)):02d}-{int(match.group(2)):02d}",
             f"{datetime.now().year}-{int(match.group(3)):02d}-{int(match.group(4)):02d}"
         )),
@@ -635,6 +642,7 @@ async def parse_multiple_events(message: str):
     # 기간 일정 패턴 확인 (같은 제목의 연속 기간)
     period_patterns = [
         r'(\d{1,2}월\s*\d{1,2}일)\s*부터\s*(\d{1,2}월\s*\d{1,2}일)\s*까지\s*([^일정추가]+)',
+        r'(\d{1,2}월\s*\d{1,2}일\([^)]*\))\s*부터\s*(\d{1,2}월\s*\d{1,2}일\([^)]*\))\s*까지\s*([^일정추가]+)',
         r'(\d{1,2}일)\s*부터\s*(\d{1,2}일)\s*까지\s*([^일정추가]+)',
         r'내일부터\s*모레까지\s*([^일정추가]+)',
         r'오늘부터\s*(\d{1,2}일)\s*까지\s*([^일정추가]+)'
@@ -716,8 +724,8 @@ async def add_multiple_events(events_data, db: Session):
             # 이벤트 타입 분류
             event_type = await classify_event_type(event_title)
             
-            # Description 생성 (시간 정보 제외)
-            description = event_title
+            # Description 생성 (상세내용이 있으면 사용, 없으면 이벤트명 사용)
+            description = await extract_description(f"{event_title} {event_date}") or event_title
             
             # 이벤트 생성 (단일 날짜)
             new_event = EventModel(
@@ -758,6 +766,15 @@ async def add_multiple_events(events_data, db: Session):
     except Exception as e:
         db.rollback()
         return f"일정 추가 중 오류가 발생했습니다: {str(e)}"
+
+
+async def extract_description(message: str) -> str:
+    """메시지에서 상세내용 추출"""
+    # "상세내용:" 뒤의 내용을 추출
+    detail_match = re.search(r'상세내용:\s*(.+?)(?:\s*$)', message, re.DOTALL)
+    if detail_match:
+        return detail_match.group(1).strip()
+    return None
 
 
 async def parse_time_period(message: str):
