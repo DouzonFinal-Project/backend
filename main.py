@@ -39,6 +39,7 @@ app = FastAPI(
 
 # ✅ CORS 설정 (프론트엔드 연동 대비)
 origins = [
+    "http://localhost:3000",
     "http://3.34.241.88",# 추후 배포 도메인 추가 가능
 ]
 
