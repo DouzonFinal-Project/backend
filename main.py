@@ -82,8 +82,8 @@ app.include_router(problem_generation.router, prefix="/v1")   # ✅ 문제 생�
 app.include_router(counseling.router,     prefix="/v1")   # ✅ 상담 관리 라우터
 
 # ✅ gemini-langchain-chatbot-service 라우터 등록
-app.include_router(milvus.router, prefix="/api/milvus", tags=["Milvus 벡터 DB"])
-app.include_router(gemini.router, prefix="/api/gemini", tags=["Gemini AI 채팅"])
+app.include_router(milvus.router, prefix="/v1/milvus", tags=["Milvus 벡터 DB"])
+app.include_router(gemini.router, prefix="/v1/gemini", tags=["Gemini AI 채팅"])
 
 # ✅ 헬스체크 엔드포인트
 @app.get("/health")
