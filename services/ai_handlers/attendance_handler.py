@@ -7,13 +7,13 @@ import re
 async def handle_attendance_query(message: str, db: Session):
     """출석처리 관련 쿼리 처리"""
     user_message = message.lower()
-    
+
     # 모든 학생 출석처리
     if any(keyword in user_message for keyword in ["모든 학생", "전체 학생", "모든학생", "전체학생", "전부", "모두"]) and any(keyword in user_message for keyword in ["출석처리", "출석", "등록"]):
         return await handle_bulk_attendance(message, db)
     
-    # 특정 학생 출석/결석 처리
-    if any(keyword in user_message for keyword in ["출석처리", "결석처리", "지각처리", "조퇴처리"]):
+    # 특정 학생 출석/결석 처리 (사유 포함 명령어도 포함)
+    if any(keyword in user_message for keyword in ["출석처리", "결석처리", "지각처리", "조퇴처리", "이유로", "사유로"]):
         return await handle_individual_attendance(message, db)
     
     # 출석 조회
@@ -58,7 +58,7 @@ async def handle_bulk_attendance(message: str, db: Session):
         db.commit()
         
         if processed_count > 0:
-            return f"총 {len(students)}명 중 {processed_count}명이 출석처리되었습니다. (이미 처리된 학생: {already_processed}명)"
+            return f"모든 학생이 출석처리되었습니다. (총 {len(students)}명)"
         else:
             return f"모든 학생이 이미 출석처리되어 있습니다. (총 {len(students)}명)"
             
@@ -70,24 +70,20 @@ async def handle_bulk_attendance(message: str, db: Session):
 async def handle_individual_attendance(message: str, db: Session):
     """특정 학생 출석/결석 처리 (나머지 학생은 출석처리)"""
     try:
-        # 학생명과 상태 추출
-        student_names = extract_multiple_student_names(message)
-        attendance_status = extract_attendance_status(message)
+        # 학생별 상태와 사유 추출
+        student_info_list = extract_student_status_pairs(message)
         
-        if not student_names:
-            return "학생명을 찾을 수 없습니다. '김민수 결석처리해줘' 또는 '이예은과 김지영 결석처리해줘'와 같이 입력해주세요."
-        
-        if not attendance_status:
-            return "출석 상태를 찾을 수 없습니다. '출석', '결석', '지각', '조퇴' 중 하나를 입력해주세요."
+        if not student_info_list:
+            return "학생명과 출석 상태를 찾을 수 없습니다. '김민수 결석처리해줘' 또는 '최지연의 지각이유로 늦잠, 김정호의 결석이유로 몸이아픔으로 처리해줘'와 같이 입력해주세요."
         
         # 학생들 조회
         target_students = []
         not_found_students = []
         
-        for student_name in student_names:
+        for student_name, status, reason in student_info_list:
             student = db.query(Student).filter(Student.student_name == student_name).first()
             if student:
-                target_students.append(student)
+                target_students.append((student, status, reason))
             else:
                 not_found_students.append(student_name)
         
@@ -97,7 +93,7 @@ async def handle_individual_attendance(message: str, db: Session):
         today = date.today()
         processed_count = 0
         already_processed = 0
-        target_student_ids = [s.id for s in target_students]
+        target_student_ids = [s.id for s, _, _ in target_students]
         
         # 모든 학생 조회
         all_students = db.query(Student).all()
@@ -113,34 +109,44 @@ async def handle_individual_attendance(message: str, db: Session):
                 # 기존 출석 상태가 있으면
                 if student.id in target_student_ids:
                     # 대상 학생은 요청된 상태로 변경
-                    existing_attendance.status = attendance_status
+                    target_info = next((s, status, reason) for s, status, reason in target_students if s.id == student.id)
+                    existing_attendance.status = target_info[1]
+                    if target_info[2]:  # 사유가 있으면
+                        existing_attendance.reason = target_info[2]
                     already_processed += 1
                 # 나머지 학생은 기존 상태 유지 (변경하지 않음)
             else:
                 # 새 출석 등록
                 if student.id in target_student_ids:
                     # 대상 학생은 요청된 상태로 등록
-                    status = attendance_status
+                    target_info = next((s, status, reason) for s, status, reason in target_students if s.id == student.id)
+                    status = target_info[1]
+                    reason = target_info[2]
                 else:
                     # 나머지 학생은 출석으로 등록
                     status = "출석"
+                    reason = None
                 
                 new_attendance = Attendance(
                     student_id=student.id,
                     date=today,
-                    status=status
+                    status=status,
+                    reason=reason
                 )
                 db.add(new_attendance)
                 processed_count += 1
         
         db.commit()
         
-        target_names = [s.student_name for s in target_students]
+        # 결과 메시지 생성
+        result_messages = []
+        for student, status, reason in target_students:
+            if reason:
+                result_messages.append(f"'{student.student_name}' {status} (사유: {reason})")
+            else:
+                result_messages.append(f"'{student.student_name}' {status}")
         
-        if len(target_students) == 1:
-            return f"'{target_names[0]}' 학생이 '{attendance_status}' 처리되었습니다."
-        else:
-            return f"'{', '.join(target_names)}' 학생들이 '{attendance_status}' 처리되었습니다."
+        return f"{', '.join(result_messages)} 처리되었습니다."
             
     except Exception as e:
         db.rollback()
@@ -216,6 +222,9 @@ def extract_multiple_student_names(message: str) -> list:
     clean_message = re.sub(r'\s*이랑\s*', ' ', clean_message)
     clean_message = re.sub(r'\s*랑\s*', ' ', clean_message)
     
+    # 조사 제거 (은, 는, 이, 가, 을, 를, 에, 에서, 로, 으로)
+    clean_message = re.sub(r'\s*[은는이가을를에에서로으로]\s*', ' ', clean_message)
+    
     # 한글 이름 패턴 (2-4자)
     name_pattern = r'([가-힣]{2,4})'
     matches = re.findall(name_pattern, clean_message)
@@ -243,3 +252,53 @@ def extract_attendance_status(message: str) -> str:
         return '출석'
     else:
         return None
+
+
+def extract_student_status_pairs(message: str) -> list:
+    """메시지에서 학생별 출석 상태 쌍과 사유 추출"""
+    # 출석 상태 키워드
+    status_keywords = ['출석', '결석', '지각', '조퇴']
+    
+    # 학생별 정보 추출 (이름, 상태, 사유)
+    student_info_list = []
+    
+    # "최지연의 지각이유로 늦잠, 김정호의 결석이유로 몸이아픔" 패턴 처리
+    reason_pattern = r'([가-힣]{2,4})의\s*([가-힣]+)이유로\s*([가-힣\w]+?)(?:으로|로|,|$)'
+    reason_matches = re.findall(reason_pattern, message)
+    
+    for student_name, status, reason in reason_matches:
+        if status in status_keywords:
+            student_info_list.append((student_name, status, reason))
+    
+    # reason 패턴으로 처리된 학생이 있으면 그것만 반환
+    if student_info_list:
+        return student_info_list
+    
+    # 기존 패턴 처리 ("김정호 지각 김종수 결석" 형태)
+    # 연결어, 조사, 쉼표 제거
+    clean_message = re.sub(r'\s*[과와이랑랑]\s*', ' ', message)
+    clean_message = re.sub(r'\s*[은는이가을를에에서로으로]\s*', ' ', clean_message)
+    clean_message = re.sub(r'\s*,\s*', ' ', clean_message)  # 쉼표 제거
+    
+    words = clean_message.split()
+    i = 0
+    while i < len(words):
+        word = words[i]
+        
+        # 한글 이름인지 확인 (2-4자)
+        if re.match(r'^[가-힣]{2,4}$', word) and word not in ['출석처리', '결석처리', '지각처리', '조퇴처리', '처리', '해줘', '이유로']:
+            student_name = word
+            
+            # 다음 단어가 상태인지 확인
+            if i + 1 < len(words) and words[i + 1] in status_keywords:
+                status = words[i + 1]
+                student_info_list.append((student_name, status, None))  # 사유 없음
+                i += 2  # 학생명과 상태를 건너뛰기
+            else:
+                # 상태가 없으면 기본값으로 '결석' 사용
+                student_info_list.append((student_name, '결석', None))
+                i += 1
+        else:
+            i += 1
+    
+    return student_info_list
