@@ -35,8 +35,8 @@ async def process_ai_query(message: str, db: Session):
     elif any(keyword in user_message for keyword in ["수업", "시간표", "교시", "다음시간"]):
         return await handle_lesson_query(message, db)
     
-    # 출결 관리 조회
-    elif any(keyword in user_message for keyword in ["출석", "결석", "출결", "출석률", "출석현황"]):
+    # 출결 관리 조회 및 처리
+    elif any(keyword in user_message for keyword in ["출석", "결석", "출결", "출석률", "출석현황", "출석처리", "결석처리", "지각처리", "조퇴처리"]):
         return await handle_attendance_query(message, db)
 
     
