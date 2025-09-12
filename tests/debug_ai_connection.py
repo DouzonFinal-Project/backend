@@ -82,17 +82,17 @@ def test_alternative_connections():
     print("\n🔄 대안 연결 방법 테스트")
     print("=" * 40)
     
-    # 1. localhost 테스트 (AI 서버가 로컬에 있을 경우)
-    print("1. localhost 테스트")
+    # 1. backernd 테스트 (AI 서버가 로컬에 있을 경우)
+    print("1. backernd 테스트")
     try:
-        response = requests.get("http://localhost:8000/health", timeout=5)
-        print(f"✅ localhost:8000 연결 성공: {response.status_code}")
+        response = requests.get("http://10.0.141.42:8000/health", timeout=5)
+        print(f"✅ 10.0.141.42:8000 연결 성공: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
             print(f"   응답: {data}")
-            return "http://localhost:8000"
+            return "http://10.0.141.42:8000"
     except Exception as e:
-        print(f"❌ localhost:8000 연결 실패: {e}")
+        print(f"❌ 10.0.141.42:8000 연결 실패: {e}")
     
     # 2. 다른 포트 테스트
     ports_to_test = [8001, 8002, 8080, 3000, 5000]
@@ -107,15 +107,15 @@ def test_alternative_connections():
         except Exception:
             print(f"❌ 포트 {port} 연결 실패")
     
-    # 3. 127.0.0.1 테스트
-    print(f"\n3. 127.0.0.1 테스트")
+    # 3. 10.0.141.42 테스트
+    print(f"\n3. 10.0.141.42 테스트")
     try:
-        response = requests.get("http://127.0.0.1:8000/health", timeout=5)
-        print(f"✅ 127.0.0.1:8000 연결 성공: {response.status_code}")
+        response = requests.get("http://10.0.141.42:8000/health", timeout=5)
+        print(f"✅ 10.0.141.42:8000 연결 성공: {response.status_code}")
         if response.status_code == 200:
-            return "http://127.0.0.1:8000"
+            return "http://10.0.141.42:8000"
     except Exception as e:
-        print(f"❌ 127.0.0.1:8000 연결 실패: {e}")
+        print(f"❌ 10.0.141.42:8000 연결 실패: {e}")
     
     return None
 
@@ -162,8 +162,8 @@ def generate_solutions():
     
     print("\n3. .env 파일 수정 방법:")
     print("   LLM_API_BASE_URL을 다음 중 하나로 변경:")
-    print("   - http://localhost:8000 (로컬 실행시)")
-    print("   - http://127.0.0.1:8000 (로컬 실행시)")
+    print("   - http://10.0.141.42:8000 (로컬 실행시)")
+    print("   - http://10.0.141.42:8000 (로컬 실행시)")
     print("   - AI팀에서 제공한 정확한 주소")
 
 def main():

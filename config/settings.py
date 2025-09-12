@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # CORS
     # =========================
     # 콤마(,)로 구분된 문자열 → List[str] 로 파싱
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["http://3.34.241.88:3000"]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     # =========================
     # Vector DB (Milvus)
     # =========================
-    MILVUS_HOST: str = "localhost"
+    MILVUS_HOST: str = "10.0.141.42"
     MILVUS_PORT: int = 19530
     MILVUS_COLLECTION: str = "docs_v1"
     MILVUS_DIM: int = 768
@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     # =========================
     # Object Storage (MinIO / S3 호환)
     # =========================
-    MINIO_ENDPOINT: str = "localhost:9000"  # 예: "minio:9000" 또는 "play.min.io:9000"
+    MINIO_ENDPOINT: str = "10.0.141.42:9000"  # 예: "minio:9000" 또는 "play.min.io:9000"
     MINIO_ACCESS_KEY: str = "admin"
     MINIO_SECRET_KEY: str = "admin1234"
     MINIO_BUCKET: str = "teacher-docs"
