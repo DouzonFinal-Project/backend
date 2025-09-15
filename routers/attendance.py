@@ -32,14 +32,7 @@ def get_db():
 #   1) 프론트엔드/외부 API 연동 시 인코딩 문제 방지
 #   2) 국제화(i18n) 확장 시 언어 매핑이 용이
 # ==========================================================
-STATUS_MAP = {
-    "출석": "present",
-    "결석": "absent",
-    "지각": "late",
-    "조회": "checkin"
-}
-def convert_status(status: str) -> str:
-    return STATUS_MAP.get(status, status)
+# 상태값 변환 제거 - 한글 상태를 그대로 사용
 
 # ==========================================================
 # [1단계] CRUD 기본 라우터 - 루트 경로 우선 처리
@@ -61,7 +54,7 @@ def create_attendance(attendance: AttendanceSchema, db: Session = Depends(get_db
             "id": db_attendance.id,
             "student_id": db_attendance.student_id,
             "date": str(db_attendance.date),
-            "status": convert_status(db_attendance.status),  # 상태값은 영어로 변환
+            "status": db_attendance.status,  # 한글 상태 그대로 사용
             "reason": db_attendance.reason,
             "message": "Attendance record created successfully"
         }
@@ -81,7 +74,7 @@ def read_attendance_list(db: Session = Depends(get_db)):
                 "id": r.id,
                 "student_id": r.student_id,
                 "date": str(r.date),
-                "status": convert_status(r.status),
+                "status": r.status,
                 "reason": r.reason
             }
             for r in records
@@ -293,7 +286,7 @@ def read_attendance(attendance_id: int, db: Session = Depends(get_db)):
             "id": attendance.id,
             "student_id": attendance.student_id,
             "date": str(attendance.date),
-            "status": convert_status(attendance.status),
+            "status": attendance.status,
             "reason": attendance.reason
         }
     }
@@ -318,7 +311,7 @@ def update_attendance(attendance_id: int, updated: AttendanceSchema, db: Session
             "id": attendance.id,
             "student_id": attendance.student_id,
             "date": str(attendance.date),
-            "status": convert_status(attendance.status),
+            "status": attendance.status,
             "reason": attendance.reason,
             "message": "Attendance record updated successfully"
         }
@@ -342,3 +335,46 @@ def delete_attendance(attendance_id: int, db: Session = Depends(get_db)):
             "message": "Attendance record deleted successfully"
         }
     }
+
+
+@router.get("/stats/students")
+async def get_student_attendance_stats(db: Session = Depends(get_db)):
+    """학생별 출석 통계 조회 (전체 기간)"""
+    try:
+        # 모든 학생 조회
+        students = db.query(StudentModel).all()
+        
+        # 학생별 출석 통계 계산
+        stats_data = []
+        for student in students:
+            # 각 상태별 카운트
+            attendance_counts = db.query(
+                AttendanceModel.status,
+                func.count(AttendanceModel.id).label('count')
+            ).filter(
+                AttendanceModel.student_id == student.id
+            ).group_by(AttendanceModel.status).all()
+            
+            # 상태별 카운트를 딕셔너리로 변환
+            status_counts = {status: count for status, count in attendance_counts}
+            
+            stats_data.append({
+                "student_id": student.id,
+                "student_name": student.student_name,
+                "class_id": student.class_id,
+                "absent_count": status_counts.get("결석", 0),
+                "late_count": status_counts.get("지각", 0),
+                "early_count": status_counts.get("조퇴", 0),
+                "present_count": status_counts.get("출석", 0)
+            })
+        
+        return {
+            "success": True,
+            "data": stats_data
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"학생별 출석 통계 조회 실패: {str(e)}"
+        }

@@ -138,13 +138,16 @@ async def handle_individual_attendance(message: str, db: Session):
         
         db.commit()
         
-        # 결과 메시지 생성
+        # 결과 메시지 생성 (사용자 입력 순서 보존)
         result_messages = []
-        for student, status, reason in target_students:
-            if reason:
-                result_messages.append(f"'{student.student_name}' {status} (사유: {reason})")
-            else:
-                result_messages.append(f"'{student.student_name}' {status}")
+        for student_name, status, reason in student_info_list:
+            # 해당 학생의 실제 Student 객체 찾기
+            student = next((s for s, _, _ in target_students if s.student_name == student_name), None)
+            if student:
+                if reason:
+                    result_messages.append(f"'{student.student_name}' {status} (사유: {reason})")
+                else:
+                    result_messages.append(f"'{student.student_name}' {status}")
         
         return f"{', '.join(result_messages)} 처리되었습니다."
             
@@ -263,7 +266,7 @@ def extract_student_status_pairs(message: str) -> list:
     student_info_list = []
     
     # "최지연의 지각이유로 늦잠, 김정호의 결석이유로 몸이아픔" 패턴 처리
-    reason_pattern = r'([가-힣]{2,4})의\s*([가-힣]+)이유로\s*([가-힣\w]+?)(?:으로|로|,|$)'
+    reason_pattern = r'([가-힣]{2,4})의\s*([가-힣]+)이유로\s*([가-힣\w]+?)(?:으로|로|으로 처리해줘|로 처리해줘|,|$)'
     reason_matches = re.findall(reason_pattern, message)
     
     for student_name, status, reason in reason_matches:
@@ -271,6 +274,36 @@ def extract_student_status_pairs(message: str) -> list:
             student_info_list.append((student_name, status, reason))
     
     # reason 패턴으로 처리된 학생이 있으면 그것만 반환
+    if student_info_list:
+        return student_info_list
+    
+    # 통합 패턴 처리: 쉼표로 구분된 모든 패턴을 한 번에 처리
+    # "김준혁 지각, 김혜진 결석처리해줘" 형태
+    parts = re.split(r'\s*,\s*', message)
+    
+    for part in parts:
+        part = part.strip()
+        
+        # "김종수 지각처리해줘" 패턴 처리
+        process_pattern = r'([가-힣]{2,4})\s*([가-힣]+)처리(?:해줘)?'
+        process_match = re.search(process_pattern, part)
+        
+        if process_match:
+            student_name, status = process_match.groups()
+            if status in status_keywords:
+                student_info_list.append((student_name, status, None))
+                continue
+        
+        # "김지영 지각" 패턴 처리
+        simple_pattern = r'([가-힣]{2,4})\s*([가-힣]+)(?:해줘)?$'
+        simple_match = re.search(simple_pattern, part)
+        
+        if simple_match:
+            student_name, status = simple_match.groups()
+            if status in status_keywords:
+                student_info_list.append((student_name, status, None))
+    
+    # 패턴으로 처리된 학생이 있으면 그것만 반환
     if student_info_list:
         return student_info_list
     
@@ -295,8 +328,8 @@ def extract_student_status_pairs(message: str) -> list:
                 student_info_list.append((student_name, status, None))  # 사유 없음
                 i += 2  # 학생명과 상태를 건너뛰기
             else:
-                # 상태가 없으면 기본값으로 '결석' 사용
-                student_info_list.append((student_name, '결석', None))
+                # 상태가 없으면 기본값으로 '출석' 사용 (결석이 아닌 출석으로 변경)
+                student_info_list.append((student_name, '출석', None))
                 i += 1
         else:
             i += 1
