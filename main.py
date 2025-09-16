@@ -8,7 +8,6 @@ import logging
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-
 # ✅ 미들웨어 임포트
 from middlewares.timing import TimingMiddleware
 from middlewares.error_handler import add_error_handlers
@@ -25,7 +24,8 @@ from routers import (
     students, subjects, teachers, test_scores, tests,
     front_proxy, pdf_reports, problem_generation,
 
-    counseling   # ✅ 새 상담 관리 라우터 추가
+    counseling,   # ✅ 상담 관리 라우터 추가
+    grades_dashboard  # ✅ 성적 대시보드 라우터 추가
 )
 
 # ✅ gemini-langchain-chatbot-service 라우터 임포트
@@ -40,7 +40,7 @@ app = FastAPI(
 # ✅ CORS 설정 (프론트엔드 연동 대비)
 origins = [
     "http://localhost:3000",
-    "http://3.34.241.88",# 추후 배포 도메인 추가 가능
+    "http://3.34.241.88", # 추후 배포 도메인 추가 가능
 ]
 
 app.add_middleware(
@@ -63,6 +63,7 @@ app.include_router(auth.router,           prefix="/v1")
 app.include_router(classes.router,        prefix="/v1")
 app.include_router(events.router,         prefix="/v1")
 app.include_router(grades.router,         prefix="/v1")
+app.include_router(grades_dashboard.router, prefix="/v1")   # ✅ 성적 대시보드 라우터
 app.include_router(llm.router,            prefix="/v1")   # ✅ 새 Gemini 라우터
 app.include_router(meetings.router,       prefix="/v1")
 app.include_router(notices.router,        prefix="/v1")
