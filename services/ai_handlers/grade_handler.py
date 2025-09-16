@@ -43,8 +43,8 @@ async def handle_grade_query(message: str, db: Session):
         subject = db.query(SubjectModel).filter(SubjectModel.id == grade.subject_id).first()
         subject_name = subject.name if subject else f"과목ID {grade.subject_id}"
         
-        # term에 따른 시험 구분 (1: 중간고사, 2: 기말고사)
-        term_name = "중간고사" if grade.term == 1 else "기말고사" if grade.term == 2 else f"{grade.term}학기"
+        # term에 따른 시험 구분 (1: 1학기, 2: 2학기)
+        term_name = "1학기" if grade.term == 1 else "2학기" if grade.term == 2 else f"{grade.term}학기"
         grade_info.append(f"• {subject_name}: {term_name} {grade.average_score}점 (등급: {grade.grade_letter})")
     
     grade_list = "\n".join(grade_info)
@@ -59,15 +59,15 @@ async def handle_grade_query(message: str, db: Session):
     위 정보를 바탕으로 간결하고 명확한 한국어로 답변해주세요.
     
     답변 형식:
-    - 먼저 과목별로 중간고사와 기말고사 성적을 간단히 제시
+    - 먼저 과목별로 1학기와 2학기 성적을 간단히 제시
     - 성적 정보 아래에 전체적인 학습 상황에 대한 간단한 피드백 추가 (2-3문장)
     - 이모지나 마크다운 형식 사용 금지
     - 일반 텍스트로만 답변
     - 예시: 
-    "국어: 중간고사 62점(D), 기말고사 83점(B)
-    수학: 중간고사 69점(D), 기말고사 99점(A+)
+    "국어: 1학기 62점(D), 2학기 83점(B)
+    수학: 1학기 69점(D), 2학기 99점(A+)
     
-    전체적으로 기말고사에서 대부분 과목에서 향상된 모습을 보이고 있습니다. 특히 수학에서 큰 발전이 있었습니다."
+    전체적으로 2학기에서 대부분 과목에서 향상된 모습을 보이고 있습니다. 특히 수학에서 큰 발전이 있었습니다."
     """
     
     # Gemini API 호출
