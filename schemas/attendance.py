@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import date
 
 class Attendance(BaseModel):
-    id: int                                  # 출결 고유 ID
+    id: Optional[int] = None                 # 출결 고유 ID (생성 시에는 None)
     student_id: int                          # 학생 ID
     date: date                               # 날짜
     status: str                              # 출결 상태 (예: 출석, 지각, 결석)
