@@ -1,3 +1,4 @@
+# schemas/school_report.py
 from pydantic import BaseModel
 from typing import Optional
 

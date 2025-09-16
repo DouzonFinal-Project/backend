@@ -1,3 +1,4 @@
+# models/school_report.py
 from sqlalchemy import Column, Integer, String
 from database.db import Base
 
