@@ -20,7 +20,7 @@ from routers import (
     ai_chatbot,  # ← AI 챗봇 라우터
     ai,  # ← 새 AI 챗봇 라우터
 
-    meetings, notices, reports, school_report,
+    meetings, notices, reports, school_report, school_report_ai,
     students, subjects, teachers, test_scores, tests,
     front_proxy, pdf_reports, problem_generation,
 
@@ -58,29 +58,30 @@ app.add_middleware(TimingMiddleware)
 add_error_handlers(app)
 
 # ✅ /v1 프리픽스 라우터 등록
-app.include_router(attendance.router,     prefix="/v1")
-app.include_router(auth.router,           prefix="/v1")
-app.include_router(classes.router,        prefix="/v1")
-app.include_router(events.router,         prefix="/v1")
-app.include_router(grades.router,         prefix="/v1")
-app.include_router(grades_dashboard.router, prefix="/v1")   # ✅ 성적 대시보드 라우터
-app.include_router(llm.router,            prefix="/v1")   # ✅ 새 Gemini 라우터
-app.include_router(meetings.router,       prefix="/v1")
-app.include_router(notices.router,        prefix="/v1")
-app.include_router(reports.router,        prefix="/v1")
-app.include_router(exams.router,          prefix="/v1")
-app.include_router(school_report.router,  prefix="/v1")
-app.include_router(students.router,       prefix="/v1")
-app.include_router(subjects.router,       prefix="/v1")
-app.include_router(teachers.router,       prefix="/v1")
-app.include_router(test_scores.router,    prefix="/v1")
-app.include_router(tests.router,          prefix="/v1")
-app.include_router(front_proxy.router,    prefix="/v1")
-app.include_router(ai_chatbot.router,     prefix="/v1")   # ✅ AI 통합 라우터          
-app.include_router(ai.router,             prefix="/v1")   # ✅ AI 챗봇 라우터
-app.include_router(pdf_reports.router,    prefix="/v1")   # ✅ PDF 생성 라우터
+app.include_router(attendance.router,         prefix="/v1")
+app.include_router(auth.router,               prefix="/v1")
+app.include_router(classes.router,            prefix="/v1")
+app.include_router(events.router,             prefix="/v1")
+app.include_router(grades.router,             prefix="/v1")
+app.include_router(grades_dashboard.router,   prefix="/v1")   # ✅ 성적 대시보드 라우터
+app.include_router(llm.router,                prefix="/v1")   # ✅ 새 Gemini 라우터
+app.include_router(meetings.router,           prefix="/v1")
+app.include_router(notices.router,            prefix="/v1")
+app.include_router(reports.router,            prefix="/v1")
+app.include_router(exams.router,              prefix="/v1")
+app.include_router(school_report.router,      prefix="/v1")
+app.include_router(school_report_ai.router,   prefix="/v1")
+app.include_router(students.router,           prefix="/v1")
+app.include_router(subjects.router,           prefix="/v1")
+app.include_router(teachers.router,           prefix="/v1")
+app.include_router(test_scores.router,        prefix="/v1")
+app.include_router(tests.router,              prefix="/v1")
+app.include_router(front_proxy.router,        prefix="/v1")
+app.include_router(ai_chatbot.router,         prefix="/v1")   # ✅ AI 통합 라우터          
+app.include_router(ai.router,                 prefix="/v1")   # ✅ AI 챗봇 라우터
+app.include_router(pdf_reports.router,        prefix="/v1")   # ✅ PDF 생성 라우터
 app.include_router(problem_generation.router, prefix="/v1")   # ✅ 문제 생성 라우터
-app.include_router(counseling.router,     prefix="/v1")   # ✅ 상담 관리 라우터
+app.include_router(counseling.router,         prefix="/v1")   # ✅ 상담 관리 라우터
 
 # ✅ gemini-langchain-chatbot-service 라우터 등록
 app.include_router(milvus.router, prefix="/v1/milvus", tags=["Milvus 벡터 DB"])
