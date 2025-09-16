@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from database.db import SessionLocal
 from models.students import Student as StudentModel
@@ -21,7 +21,11 @@ def get_db():
 # [대시보드] 반 성적 요약
 # ==========================================================
 @router.get("/dashboard/{class_id}")
-def get_grades_dashboard(class_id: int, db: Session = Depends(get_db)):
+def get_grades_dashboard(
+    class_id: int,
+    term: str = Query("2학기", description="조회할 학기 (예: 1학기, 2학기)"),
+    db: Session = Depends(get_db)
+):
     # 반 학생 조회
     students = db.query(StudentModel).filter(StudentModel.class_id == class_id).all()
     if not students:
@@ -32,16 +36,19 @@ def get_grades_dashboard(class_id: int, db: Session = Depends(get_db)):
     subject_scores = {}
 
     for student in students:
+        # ✅ 학기(term) 조건 추가
         grades = (
             db.query(GradeModel, SubjectModel)
             .join(SubjectModel, SubjectModel.id == GradeModel.subject_id)
-            .filter(GradeModel.student_id == student.id)
+            .filter(
+                GradeModel.student_id == student.id,
+                GradeModel.term == term  # 학기 필터링
+            )
             .all()
         )
 
         scores, total_score, subject_count = {}, 0, 0
         for grade, subject in grades:
-            # ✅ 성적 알파벳 제거 → 숫자 점수만 기록
             scores[subject.name] = grade.average_score
             if grade.average_score is not None:
                 total_score += grade.average_score
@@ -96,6 +103,7 @@ def get_grades_dashboard(class_id: int, db: Session = Depends(get_db)):
         "success": True,
         "data": {
             "class_id": class_id,
+            "term": term,  # ✅ 현재 조회한 학기 반환
             "overview": {
                 "class_avg": class_avg,
                 "highest": best_student["average"] if best_student else None,
@@ -103,7 +111,7 @@ def get_grades_dashboard(class_id: int, db: Session = Depends(get_db)):
                 "need_guidance": len(below_threshold),
             },
             "subject_avg": subject_avg,
-            "distribution": distribution,   # ✅ 비율 제거 → 단순 숫자
+            "distribution": distribution,   # ✅ 단순 숫자
             "alerts": {
                 "below_threshold": below_threshold
             },
