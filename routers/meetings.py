@@ -4,6 +4,7 @@ from sqlalchemy import func, extract
 from database.db import SessionLocal
 from models.meetings import Meeting as MeetingModel
 from schemas.meetings import Meeting as MeetingSchema, MeetingCreate
+from datetime import date, timedelta
 
 router = APIRouter(prefix="/meetings", tags=["상담 기록"])
 
@@ -116,6 +117,30 @@ def get_meetings_by_month(year: int, month: int, db: Session = Depends(get_db)):
         "data": [m.__dict__ for m in meetings],
         "message": f"{year}년 {month}월 상담 기록 조회 성공"
     }
+
+
+# ✅ [STATS] 이번 주 상담 건수 통계
+@router.get("/stats/weekly")
+def get_weekly_meeting_stats(db: Session = Depends(get_db)):
+    today = date.today()
+    start_of_week = today - timedelta(days=today.weekday())   # 이번 주 월요일
+    end_of_week = start_of_week + timedelta(days=6)           # 이번 주 일요일
+
+    count = (
+        db.query(func.count(MeetingModel.id))
+        .filter(MeetingModel.date >= start_of_week, MeetingModel.date <= end_of_week)
+        .scalar()
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "week": f"{start_of_week} ~ {end_of_week}",
+            "weekly_meeting_count": count
+        },
+        "message": "이번 주 상담 건수 통계 조회 성공"
+    }
+
 
 
 # ✅ [STATS] 교사별 상담 건수 통계
