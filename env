@@ -1,0 +1,42 @@
+# ===== Runtime =====
+ENV=
+APP_HOST=
+APP_PORT=
+
+# ===== Database =====
+DB_HOST=
+DB_PORT=
+DB_USER=
+DB_PASSWORD=
+DB_NAME=
+
+# ===== JWT =====
+JWT_SECRET=
+JWT_ALGORITHM=
+
+# ===== MILVUS ====
+MILVUS_HOST=
+MILVUS_PORT=
+MILVUS_SECURE=
+MILVUS_ENABLED=
+MILVYS_COLLECTON_NAME=
+
+# ===== CORS (JSON 배열 문자열) =====
+CORS_ORIGINS=["http://localhost:3000","http://localhost","http://127.0.0.1:3000"]
+
+# ===== Front / LLM / Gemini (Settings가 필수 요구) =====
+FRONT_API_BASE_URL=     # 백엔드가 내부에서 참조만 하면 /v1 로 두면 됨
+FRONT_INTERNAL_TOKEN=  # 사용 안 해도 더미값 채우기
+
+# ===== GEMINI =====
+GEMINI_API_KEY=
+GEMINI_MODEL=
+GEMINI_MODEL_EMBED=
+EMBEMDDING_DIM=
+
+# ===== LLM =====
+LLM_API_BASE_URL=
+LLM_INTERNAL_TOKEN=
+
+# ===== docker ======
+BACK_IMAGE=
